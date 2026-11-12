@@ -21,17 +21,23 @@
   type HelpSectionKey =
     | "help.toolbar"
     | "help.canvas"
+    | "help.shape"
     | "help.preflight"
     | "help.templates"
+    | "help.printers"
     | "help.printing"
+    | "help.batch"
     | "help.serial";
 
   const groups: { icon: MaterialIcon; key: HelpSectionKey }[] = [
     { icon: "select_all", key: "help.toolbar" },
     { icon: "crop_free", key: "help.canvas" },
+    { icon: "radio_button_unchecked", key: "help.shape" },
     { icon: "fact_check", key: "help.preflight" },
     { icon: "sd_storage", key: "help.templates" },
+    { icon: "usb", key: "help.printers" },
     { icon: "print", key: "help.printing" },
+    { icon: "dataset", key: "help.batch" },
     { icon: "pin", key: "help.serial" },
   ];
 </script>

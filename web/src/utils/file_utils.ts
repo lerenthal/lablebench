@@ -8,7 +8,7 @@ import {
   type LabelPreset,
   type LabelProps,
 } from "$/types";
-import { OBJECT_DEFAULTS, OBJECT_DEFAULTS_VECTOR, THUMBNAIL_HEIGHT, THUMBNAIL_QUALITY } from "$/defaults";
+import { OBJECT_DEFAULTS, OBJECT_DEFAULTS_VECTOR, THUMBNAIL_HEIGHT } from "$/defaults";
 import { z } from "zod";
 import { CustomCanvas } from "$/fabric-object/custom_canvas";
 import { Capacitor } from "@capacitor/core";
@@ -162,16 +162,32 @@ export class FileUtils {
     FileUtils.downloadBase64Web(filename, mime, base64Data);
   }
 
+  /**
+   * A small preview of the label, for the gallery.
+   *
+   * It is drawn onto an explicit white background and encoded as PNG. As a
+   * JPEG it came out black: a canvas with any transparency is filled in with
+   * black by the JPEG encoder, so a white label was shown as a black
+   * rectangle in the gallery.
+   */
+  static makeThumbnail(canvas: fabric.Canvas): string {
+    const height = THUMBNAIL_HEIGHT;
+    const width = Math.max(1, Math.round(((canvas.width ?? 1) / (canvas.height || 1)) * height));
+
+    const out = document.createElement("canvas");
+    out.width = width;
+    out.height = height;
+
+    const ctx = out.getContext("2d")!;
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(canvas.getElement() as HTMLCanvasElement, 0, 0, width, height);
+
+    return out.toDataURL("image/png");
+  }
+
   static makeExportedLabel(canvas: fabric.Canvas, labelProps: LabelProps, includeCsv: boolean): ExportedLabelTemplate {
-    const thumbnailBase64: string = canvas.toDataURL({
-      width: canvas.width,
-      height: canvas.height,
-      left: 0,
-      top: 0,
-      multiplier: THUMBNAIL_HEIGHT / (canvas.height || 1),
-      quality: THUMBNAIL_QUALITY,
-      format: "jpeg",
-    });
+    const thumbnailBase64: string = FileUtils.makeThumbnail(canvas);
 
     const tpl: ExportedLabelTemplate = {
       canvas: canvas.toJSON(),

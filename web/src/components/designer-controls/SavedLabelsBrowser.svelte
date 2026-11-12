@@ -204,10 +204,20 @@
     line-height: 100%;
   }
 
+  /*
+    The card is a small preview with a caption. The caption stays on one
+    line and is truncated, because a long title used to wrap onto a second
+    line and run under the buttons in the corner.
+  */
   .card > .label {
-    background-color: rgba(255, 255, 255, 0.8);
-    color: black;
+    background-color: rgba(255, 255, 255, 0.85);
     border-radius: 8px;
+    color: black;
+    max-width: 100%;
+    overflow: hidden;
+    padding-right: 2.4rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     z-index: 1;
   }
 

@@ -80,7 +80,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     const error = new Error(
       response.status === 401
-        ? `This LabelBench server requires an API key (401 — ${path}). Set one in Settings.`
+        ? `This LabelBench server requires an API key (401 — ${path}). Set one with the key button in the footer.`
         : `${response.status} ${response.statusText} — ${path}`,
     ) as ApiError;
     error.status = response.status;

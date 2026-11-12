@@ -1038,7 +1038,19 @@
         </div>
 
         <div class="stage__body" bind:this={stageBodyEl}>
-          <div class="stage__paper print-start-{labelProps.printDirection}">
+          <!--
+            The red edge marks where the print starts. On a round label that
+            is the circle's tangent, not the corner of the canvas, so the
+            inset is passed in rather than assumed.
+          -->
+          <div
+            class="stage__paper print-start-{labelProps.printDirection}"
+            style={labelProps.shape === "circle"
+              ? `--lb-print-inset: ${Math.max(
+                  0,
+                  (labelProps.size.width - labelProps.size.height) / 2,
+                )}px`
+              : ""}>
             <canvas bind:this={htmlCanvas}></canvas>
           </div>
         </div>
@@ -1318,19 +1330,47 @@
     padding: var(--lb-space-5);
   }
 
+  /*
+    The paper has no background of its own.
+
+    The canvas draws the label — a rectangle, a rounded rectangle or a circle
+    — so a white rectangle behind it would make a round label look square.
+    The shadow is a drop-shadow rather than a box-shadow for the same reason:
+    a drop-shadow follows the pixels that were actually drawn, so a round
+    label casts a round shadow.
+  */
   .stage__paper {
-    background: #ffffff;
-    border-radius: 2px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 18px 44px rgba(0, 0, 0, 0.35);
+    background: transparent;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35)) drop-shadow(0 16px 36px rgba(0, 0, 0, 0.35));
     flex: 0 0 auto;
     line-height: 0;
   }
 
-  .stage__paper.print-start-left {
-    border-left: 3px solid #ff4646;
+  /* The leading edge is drawn rather than bordered, so it can be placed at
+     the label's own edge without moving the canvas. */
+  .stage__paper {
+    position: relative;
   }
-  .stage__paper.print-start-top {
-    border-top: 3px solid #ff4646;
+
+  .stage__paper.print-start-left::before,
+  .stage__paper.print-start-top::before {
+    background: #ff4646;
+    content: "";
+    position: absolute;
+  }
+
+  .stage__paper.print-start-left::before {
+    bottom: 0;
+    left: var(--lb-print-inset, 0px);
+    top: 0;
+    width: 3px;
+  }
+
+  .stage__paper.print-start-top::before {
+    height: 3px;
+    left: 0;
+    right: 0;
+    top: var(--lb-print-inset, 0px);
   }
   .stage__paper canvas {
     display: block;

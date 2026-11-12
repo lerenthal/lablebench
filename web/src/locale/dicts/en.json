@@ -373,9 +373,9 @@
   "editor.batch": "Batch",
   "help.title": "Help",
   "help.close": "Close",
-  "help.intro": "LabelBench designs a label, checks it, and prints it from this workstation. Six things cover most of it.",
+  "help.intro": "LabelBench designs a label, checks it, and prints it from this workstation. The notes below cover most of it.",
   "help.workflow_title": "The workflow",
-  "help.step.model": "Choose the printer model and the label size. The model decides which sizes are on offer.",
+  "help.step.model": "Choose the printer model and the label size. The model decides which sizes are on offer, and the size decides how big the canvas is.",
   "help.step.objects": "Add the objects: text, images, codes, a date, a serial number.",
   "help.step.variables": "Mark the values that change per label, so a batch can fill them in.",
   "help.step.check": "Run the preflight check and fix what it reports.",
@@ -398,7 +398,7 @@
   "help.toolbar_output": "Output",
   "help.toolbar_output_desc": "The preflight check, the print preview, and the print itself.",
   "help.canvas_title": "The canvas",
-  "help.canvas_body": "The label is drawn on white paper, on a dotted workbench. The red edge is where the print starts. Zoom with the control in the corner: out, in, and fit — fit scales the label to fill the space it has, which is how you work with a 12 mm label on a large screen. The magnification is for editing only: what gets printed is unchanged.",
+  "help.canvas_body": "The label is drawn on the workbench, in the shape it was given. The red edge is where the print starts. Zoom with the control in the corner: out, in, and fit — fit scales the label to fill the space it has, which is how you work with a 12 mm label on a large screen. The magnification is for editing only: what gets printed is unchanged.",
   "help.preflight_title": "Before you print",
   "help.preflight_body": "The check reports everything that would make the printed label wrong: text that overflows its box, text too small to read, text with too little contrast against its background, an object that runs off the label and will be clipped, text covered by another object, an empty text object, and a value that was never filled in. Click a finding to select the object it belongs to, and fix it there.",
   "help.templates_title": "Templates",
@@ -414,5 +414,11 @@
   "connector.dymo.hint": "Connect a DYMO LabelWriter over USB. The browser will ask which device to use.",
   "connector.disconnect": "Disconnect",
   "templates.dymo450": "DYMO LabelWriter 450 (USB)",
-  "model.dymo450": "Dymo 450"
+  "model.dymo450": "Dymo 450",
+  "help.shape_title": "The shape of the label",
+  "help.shape_body": "A label can be a rectangle, a rounded rectangle or a circle. The shape is how the label is drawn on screen and how it appears in the gallery and in the saved preview. It does not change what the printer burns: a roll printer lays dots onto whatever paper is loaded, and the paper outside the shape is simply white. Set the shape to match the label stock you actually use.",
+  "help.printers_title": "Which printer is connected",
+  "help.printers_body": "Two families of printer are supported. A NIIMBOT — the D11 or the B21 — is reached over Bluetooth or over a USB serial adapter, and is chosen in the app bar. A DYMO LabelWriter — the 450 — is reached over USB from the browser, and is chosen with the LabelWriter button in the app bar. Only one is connected at a time, and the app bar shows which. The printer has to be plugged into the workstation the browser is running on: the server never talks to a printer.",
+  "help.batch_title": "Batch printing",
+  "help.batch_body": "A batch prints one label per row of a CSV. The template declares its variables with {placeholders}; the CSV's columns are matched to them, and the mapping is saved with the template, so the same CSV works on every workstation. Every row can be previewed before anything is printed, and a row that fails is recorded with its reason while the rest of the batch carries on."
 }
