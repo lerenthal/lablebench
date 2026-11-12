@@ -8,6 +8,7 @@
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import AppPrompt from "$/components/dialogs/AppPrompt.svelte";
   import AppConfirm from "./dialogs/AppConfirm.svelte";
+  import HelpDialog from "$/components/dialogs/HelpDialog.svelte";
   import { appPrompt } from "$/stores/prompt";
   import { apiKeyStore } from "$/services/api";
 
@@ -21,6 +22,7 @@
   let isStandalone = Utils.getAvailableTransports().capacitorBle || "__TAURI__" in window;
 
   let debugStuffShow = $state<boolean>(false);
+  let helpShow = $state<boolean>(false);
 
   /**
    * Set the shared API key.
@@ -61,6 +63,12 @@
     </div>
 
     <div class="app-bar__status">
+      <button
+        class="app-bar__help"
+        onclick={() => (helpShow = true)}
+        title={$tr("help.title")}>
+        <MdIcon icon="help_outline" />
+      </button>
       <PrinterConnector />
     </div>
   </header>
@@ -120,6 +128,10 @@
 
 {#if debugStuffShow}
   <DebugStuff bind:show={debugStuffShow} />
+{/if}
+
+{#if helpShow}
+  <HelpDialog onClose={() => (helpShow = false)} />
 {/if}
 
 <AppPrompt />

@@ -78,31 +78,40 @@
   --lb-ring: 0 0 0 3px rgba(91, 140, 255, 0.35);
 }
 
+/*
+ * The light theme is warm rather than clinical.
+ *
+ * A clinical white is not elegant, it is just cold: a label sits on white
+ * paper, and the app around it should not be a second, sharper white. The
+ * neutrals here carry a little warmth, the accent is a deep ink blue rather
+ * than a bright one, and the shadows are brown-grey so they read as paper
+ * rather than as a drop shadow on glass.
+ */
 @media (prefers-color-scheme: light) {
   :root {
-    --lb-bg: #f4f6fa;
-    --lb-bg-grad: radial-gradient(1200px 600px at 20% -10%, #e6ecf8 0%, transparent 60%),
-      radial-gradient(900px 500px at 100% 0%, #e8f0f4 0%, transparent 55%);
-    --lb-surface: #ffffff;
+    --lb-bg: #f7f5f2;
+    --lb-bg-grad: radial-gradient(1100px 560px at 15% -10%, #ebe4db 0%, transparent 62%),
+      radial-gradient(900px 480px at 100% 0%, #e5ebea 0%, transparent 58%);
+    --lb-surface: #fffdfb;
     --lb-surface-raised: #ffffff;
-    --lb-surface-sunken: #eef1f6;
-    --lb-surface-hover: #f2f5fa;
-    --lb-border: #dfe4ed;
-    --lb-border-strong: #c3ccdb;
-    --lb-text: #1a1f2b;
-    --lb-text-muted: #5c6577;
-    --lb-text-faint: #8b93a5;
-    --lb-accent: #2f6bff;
-    --lb-accent-hover: #1f56e0;
-    --lb-accent-soft: rgba(47, 107, 255, 0.1);
+    --lb-surface-sunken: #f1ede7;
+    --lb-surface-hover: #f6f2ec;
+    --lb-border: #e5dfd5;
+    --lb-border-strong: #cec6b9;
+    --lb-text: #232019;
+    --lb-text-muted: #6b6459;
+    --lb-text-faint: #948c80;
+    --lb-accent: #2f5fd0;
+    --lb-accent-hover: #24499f;
+    --lb-accent-soft: rgba(47, 95, 208, 0.1);
     --lb-accent-contrast: #ffffff;
-    --lb-danger: #d92d20;
-    --lb-danger-soft: rgba(217, 45, 32, 0.1);
-    --lb-success: #12874a;
-    --lb-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-    --lb-shadow: 0 8px 28px rgba(16, 24, 40, 0.1);
-    --lb-shadow-lg: 0 28px 70px rgba(16, 24, 40, 0.16);
-    --lb-ring: 0 0 0 3px rgba(47, 107, 255, 0.22);
+    --lb-danger: #c0392b;
+    --lb-danger-soft: rgba(192, 57, 43, 0.1);
+    --lb-success: #1f7a4d;
+    --lb-shadow-sm: 0 1px 2px rgba(74, 60, 38, 0.07);
+    --lb-shadow: 0 8px 26px rgba(74, 60, 38, 0.1);
+    --lb-shadow-lg: 0 26px 60px rgba(74, 60, 38, 0.16);
+    --lb-ring: 0 0 0 3px rgba(47, 95, 208, 0.22);
   }
 }
 
@@ -449,6 +458,28 @@ label {
   align-items: center;
   display: flex;
   gap: var(--lb-space-3);
+}
+
+/* Help is a global thing, not an editing one, so it sits in the app bar
+   rather than among the designer's own controls. */
+.app-bar__help {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--lb-border);
+  border-radius: var(--lb-radius-sm);
+  color: var(--lb-text-muted);
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+  width: 2rem;
+}
+
+.app-bar__help:hover,
+.app-bar__help:focus-visible {
+  background: var(--lb-surface-hover);
+  border-color: var(--lb-border-strong);
+  color: var(--lb-text);
 }
 
 /* A card for the working area, so the canvas is not floating on the page. */

@@ -3,6 +3,7 @@
     LabelPresetSchema,
     type LabelPreset,
     type LabelProps,
+    type TemplateModel,
     type LabelShape,
     type LabelSplit,
     type LabelUnit,
@@ -13,7 +14,7 @@
   import LabelPresetsBrowser from "$/components/designer-controls/LabelPresetsBrowser.svelte";
   import { printerInfo, printerMeta } from "$/stores/app";
   import { tr } from "$/utils/i18n";
-  import { DEFAULT_LABEL_PRESETS } from "$/defaults";
+  import { DEFAULT_LABEL_PRESETS, MODEL_LABEL_PRESETS } from "$/defaults";
   import { onMount, tick } from "svelte";
   import { LocalStoragePersistence } from "$/utils/persistence";
   import type { PrintDirection } from "@mmote/niimbluelib";
@@ -27,11 +28,13 @@
 
   interface Props {
     labelProps: LabelProps;
+    /** The printer model this template targets. Its sizes are the ones on offer. */
+    model?: TemplateModel;
     onChange: (newProps: LabelProps) => void;
     onClose?: () => void;
   }
 
-  let { labelProps, onChange, onClose }: Props = $props();
+  let { labelProps, model = "d11", onChange, onClose }: Props = $props();
 
   const tailPositions: TailPosition[] = ["right", "bottom", "left", "top"];
   const printDirections: PrintDirection[] = ["left", "top"];
@@ -134,26 +137,31 @@
     });
   };
 
+  /** Put a preset into the form. */
+  const applyPreset = (preset: LabelPreset): void => {
+    dpmm = preset.dpmm;
+    prevUnit = preset.unit;
+    unit = preset.unit;
+    printDirection = preset.printDirection;
+    width = preset.width;
+    height = preset.height;
+    title = preset.title ?? "";
+    shape = preset.shape ?? "rect";
+    split = preset.split ?? "none";
+    splitParts = preset.splitParts ?? 2;
+    tailPos = preset.tailPos ?? "right";
+    tailLength = preset.tailLength ?? 0;
+    mirror = preset.mirror ?? "none";
+    hasPresetOffset = preset.offset !== undefined;
+    offset = preset.offset !== undefined ? { ...preset.offset } : getFallbackOffset();
+  };
+
   const onLabelPresetSelected = (index: number) => {
     const preset = labelPresets[index];
     selectedPresetIndex = index;
 
     if (preset !== undefined) {
-      dpmm = preset.dpmm;
-      prevUnit = preset.unit;
-      unit = preset.unit;
-      printDirection = preset.printDirection;
-      width = preset.width;
-      height = preset.height;
-      title = preset.title ?? "";
-      shape = preset.shape ?? "rect";
-      split = preset.split ?? "none";
-      splitParts = preset.splitParts ?? 2;
-      tailPos = preset.tailPos ?? "right";
-      tailLength = preset.tailLength ?? 0;
-      mirror = preset.mirror ?? "none";
-      hasPresetOffset = preset.offset !== undefined;
-      offset = preset.offset !== undefined ? { ...preset.offset } : getFallbackOffset();
+      applyPreset(preset);
     }
   };
 
@@ -388,6 +396,30 @@
     <div class="mb-1 text-warning">{line}</div>
   {/each}
 
+  <!--
+    The sizes that fit this printer's print head, offered directly. Typing
+    millimetres and working out what the head can take is the part people get
+    wrong; these are the sizes a lab actually buys.
+  -->
+  <div class="mb-2">
+    <div class="small text-uppercase text-secondary mb-1">
+      {$tr("params.label.common_sizes")} · {model.toUpperCase()}
+    </div>
+    <div class="d-flex flex-wrap gap-1">
+      {#each MODEL_LABEL_PRESETS[model] ?? [] as preset (preset.title ?? `${preset.width}x${preset.height}`)}
+        <button
+          class="btn btn-sm btn-outline-secondary size-chip"
+          title={`${preset.width} × ${preset.height} ${preset.unit}`}
+          onclick={() => {
+            selectedPresetIndex = -1;
+            applyPreset(preset);
+          }}>
+          {preset.title ?? `${preset.width} × ${preset.height} ${preset.unit}`}
+        </button>
+      {/each}
+    </div>
+  </div>
+
   <LabelPresetsBrowser
     class="mb-1"
     presets={labelPresets}
@@ -547,6 +579,11 @@
 </AppModal>
 
 <style>
+  .size-chip {
+    font-variant-numeric: tabular-nums;
+    min-width: 5.5rem;
+  }
+
   .svg-icon {
     height: 1.5em;
     width: 1.5em;

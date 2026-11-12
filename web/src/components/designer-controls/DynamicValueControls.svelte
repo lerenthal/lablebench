@@ -9,17 +9,27 @@
     preprocessDateTime,
   } from "$/utils/dynamic_values";
   import type { SerialConfig } from "$/types";
+  import SerialConfigControls from "$/components/designer-controls/SerialConfigControls.svelte";
 
   interface Props {
     selectedObject: fabric.FabricObject | undefined;
     serialConfig: SerialConfig | undefined;
     /** What the next label would print, for the serial variable. */
     serialNextValue: string | undefined;
+    /** Called when the template's serial counter settings change. */
+    onSerialConfigChanged?: (config: SerialConfig | undefined) => void;
     editRevision: number;
     valueUpdated: () => void;
   }
 
-  let { selectedObject, serialConfig, serialNextValue, editRevision, valueUpdated }: Props = $props();
+  let {
+    selectedObject,
+    serialConfig,
+    serialNextValue,
+    onSerialConfigChanged,
+    editRevision,
+    valueUpdated,
+  }: Props = $props();
 
   const tokenOf = (obj: fabric.FabricObject | undefined): string =>
     obj instanceof TextboxExt ? (obj.dynamicToken ?? obj.text ?? "") : "";
@@ -100,6 +110,18 @@
     {#if serialNextValue !== undefined}
       <div class="small mt-1">
         {$tr("params.serial.next")}: <code>{serialNextValue}</code>
+      </div>
+    {/if}
+
+    <!--
+      The counter, the prefix and the suffix belong to the serial number
+      object, so they are shown with it. They used to sit in the properties
+      panel whether anything was selected or not, where they read as a stray
+      button rather than as the settings of anything.
+    -->
+    {#if onSerialConfigChanged !== undefined}
+      <div class="mt-2">
+        <SerialConfigControls {serialConfig} onChange={onSerialConfigChanged} />
       </div>
     {/if}
   </div>

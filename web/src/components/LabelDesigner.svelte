@@ -36,7 +36,6 @@
   import TextParamsControls from "$/components/designer-controls/TextParamsControls.svelte";
   import VariableInsertControl from "$/components/designer-controls/VariableInsertControl.svelte";
   import DynamicValueControls from "$/components/designer-controls/DynamicValueControls.svelte";
-  import SerialConfigControls from "$/components/designer-controls/SerialConfigControls.svelte";
   import {
     counterNameFor,
     formatSerialValue,
@@ -834,21 +833,6 @@
       -->
       <div class="designer-toolbar">
         <div class="tool-group">
-          <span class="tool-group__label">{$tr("editor.group.label")}</span>
-          <div class="tool-group__buttons">
-            <button
-              class="btn btn-sm btn-secondary"
-              onclick={() => (currentDialog = "label_props")}
-              title={$tr("editor.group.label")}>
-              <MdIcon icon="settings" />
-            </button>
-            <button class="btn btn-sm btn-secondary" onclick={clearCanvas} title={$tr("editor.clear")}>
-              <MdIcon icon="cancel_presentation" />
-            </button>
-          </div>
-        </div>
-
-        <div class="tool-group">
           <span class="tool-group__label">{$tr("editor.group.model")}</span>
           <div class="tool-group__buttons">
             <div class="btn-group btn-group-sm" role="group" title={$tr("templates.model")}>
@@ -865,6 +849,21 @@
                 B21
               </button>
             </div>
+          </div>
+        </div>
+
+        <div class="tool-group">
+          <span class="tool-group__label">{$tr("editor.group.label")}</span>
+          <div class="tool-group__buttons">
+            <button
+              class="btn btn-sm btn-secondary"
+              onclick={() => (currentDialog = "label_props")}
+              title={$tr("editor.label_props")}>
+              <MdIcon icon="settings" />
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick={clearCanvas} title={$tr("editor.clear")}>
+              <MdIcon icon="cancel_presentation" />
+            </button>
           </div>
         </div>
 
@@ -935,7 +934,7 @@
               title={$tr("templates.gallery")}
               onclick={() => (currentDialog = "quick_print")}>
               <MdIcon icon="bolt" />
-              {$tr("templates.gallery")}
+              {$tr("editor.gallery")}
             </button>
           </div>
         </div>
@@ -1097,20 +1096,11 @@
             {selectedObject}
             serialConfig={templateVariables.serial}
             {serialNextValue}
+            onSerialConfigChanged={onSerialConfigChanged}
             {editRevision}
             valueUpdated={controlValueUpdated} />
         {/if}
 
-          <!--
-            The serial counter belongs to the template, not to the selected
-            object, so it is set apart from the object's own controls rather
-            than sitting in the middle of them.
-          -->
-          <div class="props-panel__aside">
-            <SerialConfigControls
-              serialConfig={templateVariables.serial}
-              onChange={onSerialConfigChanged} />
-          </div>
         </div>
       </div>
     </div>
@@ -1127,7 +1117,11 @@
       serialConfig={templateVariables.serial}
       csvData={$csvData.data} />
   {:else if currentDialog === "label_props"}
-    <LabelPropsEditor onClose={() => (currentDialog = "none")} onChange={onUpdateLabelProps} {labelProps} />
+    <LabelPropsEditor
+      onClose={() => (currentDialog = "none")}
+      onChange={onUpdateLabelProps}
+      {labelProps}
+      model={templateModel} />
   {:else if currentDialog === "saved_labels"}
     <SavedLabelsMenu
       onClose={() => (currentDialog = "none")}
@@ -1184,7 +1178,7 @@
     box-shadow: var(--lb-shadow-sm);
     display: flex;
     flex-wrap: wrap;
-    gap: var(--lb-space-3) var(--lb-space-3);
+    gap: var(--lb-space-3) var(--lb-space-2);
     padding: var(--lb-space-3) var(--lb-space-4);
   }
 
@@ -1249,12 +1243,6 @@
 
   .props-panel__body {
     padding: var(--lb-space-4);
-  }
-
-  .props-panel__aside {
-    border-left: 1px solid var(--lb-border);
-    margin-left: auto;
-    padding-left: var(--lb-space-4);
   }
 
   /* --- the stage ---------------------------------------------------------------- */
