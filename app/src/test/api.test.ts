@@ -206,3 +206,80 @@ describe("assets", () => {
     assert.equal(res.statusCode, 404);
   });
 });
+
+describe("the API key gate", () => {
+  let gatedApp: Awaited<ReturnType<typeof buildServer>>;
+  let gatedDir: string;
+
+  before(async () => {
+    gatedDir = mkdtempSync(join(tmpdir(), "labelbench-auth-"));
+    process.env.LABELBENCH_DATA_DIR = gatedDir;
+    process.env.LABELBENCH_STATIC_DIR = join(gatedDir, "no-spa");
+    process.env.LABELBENCH_AUTH_MODE = "apikey";
+    process.env.LABELBENCH_API_KEY = "test-key";
+    gatedApp = await buildServer();
+    await gatedApp.ready();
+  });
+
+  after(async () => {
+    await gatedApp.close();
+    rmSync(gatedDir, { recursive: true, force: true });
+    delete process.env.LABELBENCH_AUTH_MODE;
+    delete process.env.LABELBENCH_API_KEY;
+  });
+
+  it("rejects a request with no key", async () => {
+    const res = await gatedApp.inject({ method: "GET", url: "/api/templates" });
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.json().error, "unauthorized");
+  });
+
+  it("rejects a request with the wrong key", async () => {
+    const res = await gatedApp.inject({
+      method: "GET",
+      url: "/api/templates",
+      headers: { "x-api-key": "wrong" },
+    });
+    assert.equal(res.statusCode, 401);
+  });
+
+  it("accepts a request with the right key", async () => {
+    const res = await gatedApp.inject({
+      method: "GET",
+      url: "/api/templates",
+      headers: { "x-api-key": "test-key" },
+    });
+    assert.equal(res.statusCode, 200);
+  });
+
+  it("blocks writes without the key", async () => {
+    const res = await gatedApp.inject({
+      method: "POST",
+      url: "/api/templates",
+      payload: templatePayload,
+    });
+    assert.equal(res.statusCode, 401);
+  });
+
+  it("allows writes with the key", async () => {
+    const res = await gatedApp.inject({
+      method: "POST",
+      url: "/api/templates",
+      headers: { "x-api-key": "test-key" },
+      payload: templatePayload,
+    });
+    assert.equal(res.statusCode, 201);
+  });
+
+  it("leaves health open, so a probe needs no credential", async () => {
+    const res = await gatedApp.inject({ method: "GET", url: "/api/health" });
+    assert.equal(res.statusCode, 200);
+  });
+
+  it("does not gate the SPA shell", async () => {
+    // The static dir does not exist in the test, so the shell answers 503 --
+    // what matters is that it is not 401.
+    const res = await gatedApp.inject({ method: "GET", url: "/" });
+    assert.notEqual(res.statusCode, 401);
+  });
+});

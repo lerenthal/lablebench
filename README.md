@@ -110,6 +110,28 @@ curl -k https://labelbench.local/api/health
 # {"status":"ok","service":"labelbench-server",...}
 ```
 
+### Turning on an API key (optional)
+
+Phase 1 runs **open on the trusted LAN** — that is the locked decision, and
+no login is required. But the data access sits behind a thin service layer so
+that a gate can be added later without touching the API or the editor. It is
+a real gate, not a stub: flip the switch and the API rejects everything that
+does not carry the key.
+
+```bash
+# .env
+LABELBENCH_AUTH_MODE=apikey
+LABELBENCH_API_KEY=<a long random string>
+docker compose up -d
+```
+
+Then, on each workstation, click the **key** icon in the app footer and paste
+the key. It is stored in that browser only. Health stays open so a probe can
+check liveness without a credential.
+
+> Do not enable this over plain HTTP on a shared network — the key would go
+> out in clear text. Use it behind the HTTPS origin above.
+
 > **HTTPS is not optional.** `navigator.bluetooth` and `navigator.serial` only
 > exist in a *secure context*. Over plain HTTP the APIs are simply absent, and
 > clicking through a self-signed certificate warning is not reliable enough to

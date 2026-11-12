@@ -8,6 +8,8 @@
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import AppPrompt from "$/components/dialogs/AppPrompt.svelte";
   import AppConfirm from "./dialogs/AppConfirm.svelte";
+  import { appPrompt } from "$/stores/prompt";
+  import { apiKeyStore } from "$/services/api";
 
   // eslint-disable-next-line no-undef
   const appCommit = __APP_COMMIT__;
@@ -19,6 +21,25 @@
   let isStandalone = Utils.getAvailableTransports().capacitorBle || "__TAURI__" in window;
 
   let debugStuffShow = $state<boolean>(false);
+
+  /**
+   * Set the shared API key.
+   *
+   * Phase 1 runs with no auth, so the server accepts everything. When the
+   * gate is switched on, the key goes here and every request carries it —
+   * the editor itself needs no change.
+   */
+  const setApiKey = async () => {
+    const value = await appPrompt({
+      title: $tr("main.api_key"),
+      message: $tr("main.api_key.hint"),
+      defaultValue: apiKeyStore.get(),
+    });
+
+    if (value !== null) {
+      apiKeyStore.set(value.trim());
+    }
+  };
 </script>
 
 <div class="page-wrapper d-flex flex-column min-vh-100">
@@ -69,6 +90,9 @@
     </div>
     <div>
       <a class="text-secondary" href="https://github.com/MultiMote/niimblue">{$tr("main.code")}</a>
+      <button class="text-secondary btn btn-link p-0" onclick={setApiKey} title={$tr("main.api_key")}>
+        <MdIcon icon="key" />
+      </button>
       <button class="text-secondary btn btn-link p-0" onclick={() => debugStuffShow = true}>
         <MdIcon icon="bug_report" />
       </button>

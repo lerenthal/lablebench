@@ -19,14 +19,48 @@ export type ApiError = Error & {
   body?: unknown;
 };
 
+/**
+ * The shared API key, when the server has the gate switched on.
+ *
+ * Phase 1 runs with no auth, so this is normally empty. It is kept here so
+ * that turning the gate on needs no change to the editor — the client picks
+ * the key up and sends it with every request.
+ */
+const API_KEY_STORAGE = "labelbench_api_key";
+
+export const apiKeyStore = {
+  get(): string {
+    try {
+      return localStorage.getItem(API_KEY_STORAGE) ?? "";
+    } catch {
+      return "";
+    }
+  },
+
+  set(key: string): void {
+    try {
+      if (key === "") {
+        localStorage.removeItem(API_KEY_STORAGE);
+      } else {
+        localStorage.setItem(API_KEY_STORAGE, key);
+      }
+    } catch (e) {
+      console.warn("Could not store the API key", e);
+    }
+  },
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
+
+  const apiKey = apiKeyStore.get();
 
   try {
     response = await fetch(path, {
       ...init,
       headers: {
         ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...(apiKey === "" ? {} : { "X-API-Key": apiKey }),
         ...(init?.headers ?? {}),
       },
     });
@@ -44,7 +78,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       body = await response.text();
     }
-    const error = new Error(`${response.status} ${response.statusText} — ${path}`) as ApiError;
+    const error = new Error(
+      response.status === 401
+        ? `This LabelBench server requires an API key (401 — ${path}). Set one in Settings.`
+        : `${response.status} ${response.statusText} — ${path}`,
+    ) as ApiError;
     error.status = response.status;
     error.body = body;
     throw error;

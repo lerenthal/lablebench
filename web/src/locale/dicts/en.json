@@ -311,5 +311,7 @@
     "params.label.warning.model": "The label is wider than this template's printer model:",
     "templates.gallery.filter": "Filter templates",
     "templates.gallery.no_match": "No template matches that filter.",
-    "templates.gallery.needs_data": "Needs data"
+    "templates.gallery.needs_data": "Needs data",
+    "main.api_key": "API key",
+    "main.api_key.hint": "Only needed when the server runs with an API key. Leave empty for a server without one."
 }

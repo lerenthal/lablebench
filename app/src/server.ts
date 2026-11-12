@@ -15,7 +15,7 @@ import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db/index.js";
-import { authenticate } from "./auth/index.js";
+import { authenticate, isAuthorized, rejectUnauthorized } from "./auth/index.js";
 import { registerHealthRoute, registerTemplateRoutes } from "./routes/api.js";
 import { AssetService } from "./services/assets.js";
 import { TemplateService } from "./services/templates.js";
@@ -37,8 +37,24 @@ export async function buildServer() {
   const assets = new AssetService(app.db, config.assetDir);
 
   // Resolve the actor for every request. Phase 1: always anonymous.
-  app.addHook("onRequest", async (request) => {
+  app.addHook("onRequest", async (request, reply) => {
     request.actor = authenticate(request, config).actor;
+
+    // Phase 1 runs open on the trusted LAN, which is the locked decision.
+    // But the seam has to actually gate when it is switched on: a config
+    // flag that leaves the API wide open while looking like protection is
+    // worse than no flag at all. Health stays open so a probe can check
+    // liveness without a credential.
+    if (
+      config.authMode !== "none" &&
+      request.url.startsWith("/api/") &&
+      !request.url.startsWith("/api/health")
+    ) {
+      if (!isAuthorized(request, config)) {
+        rejectUnauthorized(reply);
+        return reply;
+      }
+    }
   });
 
   await app.register(fastifyMultipart, {
