@@ -319,6 +319,28 @@ sudo ufw allow from 10.10.17.0/24 to any port 8082 proto tcp comment 'LabelBench
 Changing the port does not change the certificate, so a workstation that
 already trusts the CA keeps working — only the URL changes.
 
+### What is actually exposed
+
+The server has no public interface — only the LAN address and a Tailscale
+address — so LabelBench is not reachable from the internet. It is reachable
+from the lab network and from anything on the Tailnet.
+
+That still leaves the app itself unauthenticated in the default phase, and
+anyone who reaches the port can read and write every shared template. The
+firewall narrows *who can reach the port*; it says nothing about *what they
+can do* once they are there. If the templates matter, turn the key gate on:
+
+```bash
+# .env
+LABELBENCH_AUTH_MODE=apikey
+LABELBENCH_API_KEY=<a long random string>
+```
+
+Every `/api/*` call then needs an `x-api-key` header, and the health check
+and the page itself stay open so the browser can ask for the key. The key is
+held in the browser's local storage and entered once per workstation, through
+the key icon in the footer.
+
 Open `https://labelbench.local:8443` in Chrome. If the name does not resolve —
 mDNS does not always cross a switch — use `https://10.10.17.185:8443/` instead;
 the certificate carries the address as a SAN and the server answers on both.
