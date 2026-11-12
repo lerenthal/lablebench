@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { derived } from "svelte/store";
+  import { allocateSerialValues, peekSerialValues } from "$/utils/dynamic_values";
+  import type { SerialConfig } from "$/types";
   import { connectionState, printerClient, printerInfo, printerMeta, rfidInfo } from "$/stores/app";
   import * as effects from "$/utils/post_process";
   import {
@@ -39,9 +41,20 @@
     csvEnabled: boolean;
     /** The model this template targets. Used to check the label against its own model's head. */
     model?: TemplateModel;
+    /** The template's serial sequence, when it has one. */
+    serialConfig?: SerialConfig;
   }
 
-  let { labelProps, canvasCallback, printNow = false, csvData, csvEnabled, model, onClose }: Props = $props();
+  let {
+    labelProps,
+    canvasCallback,
+    printNow = false,
+    csvData,
+    csvEnabled,
+    model,
+    serialConfig,
+    onClose,
+  }: Props = $props();
 
   let previewCanvas: HTMLCanvasElement;
   let printState = $state<"idle" | "printing">("idle");
@@ -175,22 +188,48 @@
       for (let pageIdx = 0; pageIdx < pagesTotal; pageIdx++) {
         currentPage = pageIdx;
         console.log("Printing page", currentPage);
-        await generatePreviewData(currentPage);
 
-        // Never send an over-wide raster. The check runs per page, because
-        // the pages of a multi-page label can differ.
-        if (widthBlocked !== "") {
-          throw new Error(widthBlocked);
+        if (serialConfig === undefined) {
+          // No serial sequence: one raster, all the copies, exactly as before.
+          await generatePreviewData(currentPage);
+
+          // Never send an over-wide raster. The check runs per page, because
+          // the pages of a multi-page label can differ.
+          if (widthBlocked !== "") {
+            throw new Error(widthBlocked);
+          }
+
+          const encoded: EncodedImage = ImageEncoder.encodeCanvas(
+            previewCanvas,
+            opts.pageColor!,
+            labelProps.printDirection,
+          );
+
+          await currentPrintTask.printPage(encoded, params.quantity);
+          await currentPrintTask.waitForPageFinished();
+          continue;
         }
 
-        const encoded: EncodedImage = ImageEncoder.encodeCanvas(
-          previewCanvas,
-          opts.pageColor!,
-          labelProps.printDirection,
-        );
+        // A serial sequence means every copy is its own label, so each one
+        // takes the next number from the central counter.
+        for (let copy = 0; copy < params.quantity; copy++) {
+          const serialValues = await allocateSerialValues(serialConfig);
 
-        await currentPrintTask.printPage(encoded, params.quantity);
-        await currentPrintTask.waitForPageFinished();
+          await generatePreviewData(currentPage, serialValues);
+
+          if (widthBlocked !== "") {
+            throw new Error(widthBlocked);
+          }
+
+          const encoded: EncodedImage = ImageEncoder.encodeCanvas(
+            previewCanvas,
+            opts.pageColor!,
+            labelProps.printDirection,
+          );
+
+          await currentPrintTask.printPage(encoded, 1);
+          await currentPrintTask.waitForPageFinished();
+        }
       }
       await currentPrintTask.waitForFinished();
     } catch (e) {
@@ -372,7 +411,10 @@
     generatePreviewData(currentPage);
   };
 
-  const generatePreviewData = async (page: number): Promise<void> => {
+  const generatePreviewData = async (
+    page: number,
+    serialValues?: Record<string, string>,
+  ): Promise<void> => {
     const fabricTempCanvas = new CustomCanvas(undefined, {
       width: labelProps.size.width,
       height: labelProps.size.height,
@@ -385,15 +427,23 @@
 
     await fabricTempCanvas.loadFromJSON(canvasCallback());
 
-    let variables = {};
+    let variables: Record<string, string> = {};
 
     if (csvEnabled) {
       if (page >= 0 && page < csvParsed.length) {
-        variables = csvParsed[page];
+        variables = { ...(csvParsed[page] as Record<string, string>) };
       } else {
         console.warn(`Page ${page} is out of csv bounds (csv length is ${csvParsed.length})`);
       }
     }
+
+    // The serial number comes from the central counter. When the print path
+    // hands a value in, that number has already been taken; when it does not,
+    // this is a preview and must not consume one.
+    const serial =
+      serialValues ?? (serialConfig !== undefined ? await peekSerialValues(serialConfig) : {});
+
+    variables = { ...variables, ...serial };
 
     console.log("Page variables:", variables);
 

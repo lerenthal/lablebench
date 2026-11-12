@@ -11,6 +11,7 @@
  */
 
 import Papa from "papaparse";
+import { formatSerialValue } from "$/utils/dynamic_values";
 import type { SerialConfig, TemplateVariable } from "$/types";
 
 export type CsvRow = Record<string, string>;
@@ -104,10 +105,7 @@ export function autoBind(
 
 /** Serial-number value for a given row index. */
 export function serialValue(config: SerialConfig, index: number): string {
-  const number = config.start + index * config.step;
-  const padded = config.pad > 0 ? String(Math.abs(number)).padStart(config.pad, "0") : String(number);
-
-  return `${config.prefix}${padded}`;
+  return formatSerialValue(config.start + index * config.step, config);
 }
 
 /**

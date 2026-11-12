@@ -2,9 +2,19 @@ import * as fabric from "fabric";
 
 interface UniqueTextboxExtProps {
   fontAutoSize: boolean;
+  /**
+   * The template token this object was resolved from.
+   *
+   * A Date & time or Serial number object shows a *value* on the canvas —
+   * today's date, the next serial number — but the template has to keep the
+   * token, or the label would freeze the moment it was designed and every
+   * copy would carry the same number. So the canvas carries the resolved text
+   * and this carries the token it came from.
+   */
+  dynamicToken?: string;
 }
 
-const TEXTBOX_PROPS: Array<keyof UniqueTextboxExtProps> = ["fontAutoSize"];
+const TEXTBOX_PROPS: Array<keyof UniqueTextboxExtProps> = ["fontAutoSize", "dynamicToken"];
 
 const RTL_STRONG_CHAR_RE = /[\p{Script=Arabic}\p{Script=Hebrew}]/u;
 const LETTER_RE = /\p{Letter}/u;
@@ -32,10 +42,16 @@ export class TextboxExt<
     SProps extends SerializedTextboxExtProps = SerializedTextboxExtProps,
     EventSpec extends fabric.ITextEvents = fabric.ITextEvents,
   >
-  extends fabric.Textbox<Props, SProps, EventSpec>
-  implements UniqueTextboxExtProps
+    extends fabric.Textbox<Props, SProps, EventSpec>
+    implements UniqueTextboxExtProps
 {
   declare fontAutoSize: boolean;
+  declare dynamicToken?: string;
+
+  /** True when the object renders a value that only exists at print time. */
+  get isDynamic(): boolean {
+    return this.dynamicToken !== undefined;
+  }
 
   private widthBeforeEditing?: number;
 

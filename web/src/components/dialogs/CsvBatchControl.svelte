@@ -75,6 +75,8 @@
   let serialEnabled = $state<boolean>(initial.template.variables?.serial !== undefined);
   let serialVariable = $state<string>(initial.template.variables?.serial?.variable ?? "");
   let serialPrefix = $state<string>(initial.template.variables?.serial?.prefix ?? "");
+  let serialSuffix = $state<string>(initial.template.variables?.serial?.suffix ?? "");
+  let serialCounter = $state<string>(initial.template.variables?.serial?.counter ?? "");
   let serialStart = $state<number>(initial.template.variables?.serial?.start ?? 1);
   let serialStep = $state<number>(initial.template.variables?.serial?.step ?? 1);
   let serialPad = $state<number>(initial.template.variables?.serial?.pad ?? 0);
@@ -132,7 +134,9 @@
   function serialConfig(): SerialConfig {
     return {
       variable: serialVariable,
+      counter: serialCounter,
       prefix: serialPrefix,
+      suffix: serialSuffix,
       start: serialStart,
       step: serialStep,
       pad: serialPad,
@@ -277,6 +281,8 @@
           fabricJson,
           labelProps: { ...labelProps, printDirection: rotation },
           renderParams: { ...DEFAULT_RENDER_PARAMS, postProcess: dithering },
+          serialConfig:
+            serialEnabled && serialVariable !== "" ? serialConfig() : undefined,
           printTaskName,
           density,
           labelType: LabelType.WithGaps,
@@ -447,6 +453,14 @@
               <option value={variable.name}>{variable.name}</option>
             {/each}
           </select>
+        </div>
+        <div class="input-group input-group-sm mb-1">
+          <span class="input-group-text">{$tr("batch.serial.suffix")}</span>
+          <input class="form-control" type="text" bind:value={serialSuffix} onchange={notifyBindingChanged} />
+        </div>
+        <div class="input-group input-group-sm mb-1">
+          <span class="input-group-text">{$tr("batch.serial.counter")}</span>
+          <input class="form-control" type="text" bind:value={serialCounter} onchange={notifyBindingChanged} />
         </div>
         <div class="input-group input-group-sm mb-1">
           <span class="input-group-text">{$tr("batch.serial.prefix")}</span>

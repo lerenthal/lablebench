@@ -154,6 +154,40 @@ export const api = {
   },
 
   assetUrl: (id: string) => `/api/assets/${id}`,
+
+  /**
+   * The central serial counters.
+   *
+   * A counter is what makes a serial number central: two workstations
+   * printing the same template draw from the same sequence, and the number
+   * keeps climbing across restarts and across batches.
+   */
+  listSerialCounters: () =>
+    request<{ counters: SerialCounter[] }>("/api/serial-counters").then((r) => r.counters),
+
+  /**
+   * Take the next number from a counter.
+   *
+   * The server allocates it atomically, so two machines printing at the same
+   * moment can never be handed the same number.
+   */
+  nextSerialValue: (name: string, opts?: { start?: number; step?: number }) =>
+    request<SerialCounter>(`/api/serial-counters/${encodeURIComponent(name)}/next`, {
+      method: "POST",
+      body: JSON.stringify(opts ?? {}),
+    }),
+
+  resetSerialCounter: (name: string, value?: number) =>
+    request<SerialCounter>(`/api/serial-counters/${encodeURIComponent(name)}/reset`, {
+      method: "POST",
+      body: JSON.stringify(value === undefined ? {} : { value }),
+    }),
+};
+
+export type SerialCounter = {
+  name: string;
+  value: number;
+  updated_at: string;
 };
 
 export type AssetInfo = {

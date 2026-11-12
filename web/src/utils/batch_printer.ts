@@ -26,6 +26,8 @@ import {
   type PrintTaskName,
 } from "@mmote/niimbluelib";
 import { renderLabelCanvas, type RenderParams } from "$/utils/label_render";
+import { allocateSerialValues } from "$/utils/dynamic_values";
+import type { SerialConfig } from "$/types";
 import { evaluateWidth, printableWidth } from "$/utils/print_limits";
 import type { FabricJson, LabelProps } from "$/types";
 
@@ -53,6 +55,13 @@ export type BatchPrinterOptions = {
   headWidth?: number;
   /** The head width of the model the template targets. Rows wider than this are flagged, not rejected. */
   modelHeadWidth?: number;
+  /**
+   * The template's serial sequence, when it has one.
+   *
+   * A serial number comes from a central counter, so every copy of every row
+   * takes its own number rather than repeating one across the copies.
+   */
+  serialConfig?: SerialConfig;
 };
 
 export type BatchCallbacks = {
@@ -153,36 +162,50 @@ export async function runBatch(
       update(index, { status: "printing", error: undefined });
 
       try {
-        const canvas = await renderLabelCanvas(
-          options.fabricJson,
-          options.labelProps,
-          row.variables,
-          options.renderParams,
-        );
+        // Without a serial sequence a row is rendered once and its copies are
+        // printed together, exactly as before. With one, every copy is its own
+        // label, so each takes the next number from the central counter and is
+        // rendered separately.
+        const serialConfig = options.serialConfig;
+        const iterations = serialConfig === undefined ? 1 : copies;
 
-        // §5.1: never send an over-wide raster. Reject the row with a clear
-        // message instead of letting the printer receive something it cannot print.
-        const evaluation = evaluateWidth(
-          printableWidth(canvas, options.labelProps.printDirection),
-          options.headWidth,
-          options.modelHeadWidth,
-        );
+        for (let copy = 0; copy < iterations; copy++) {
+          const variables =
+            serialConfig === undefined
+              ? row.variables
+              : { ...row.variables, ...(await allocateSerialValues(serialConfig)) };
 
-        if (evaluation.blocked !== undefined) {
-          throw new Error(
-            `Label is ${evaluation.printWidth} px wide but the ${options.printTaskName} print head is ${options.headWidth} px. ` +
-              `Reduce the label width or choose a template for this printer.`,
+          const canvas = await renderLabelCanvas(
+            options.fabricJson,
+            options.labelProps,
+            variables,
+            options.renderParams,
           );
+
+          // §5.1: never send an over-wide raster. Reject the row with a clear
+          // message instead of letting the printer receive something it cannot print.
+          const evaluation = evaluateWidth(
+            printableWidth(canvas, options.labelProps.printDirection),
+            options.headWidth,
+            options.modelHeadWidth,
+          );
+
+          if (evaluation.blocked !== undefined) {
+            throw new Error(
+              `Label is ${evaluation.printWidth} px wide but the ${options.printTaskName} print head is ${options.headWidth} px. ` +
+                `Reduce the label width or choose a template for this printer.`,
+            );
+          }
+
+          const encoded: EncodedImage = ImageEncoder.encodeCanvas(
+            canvas,
+            options.pageColor,
+            options.labelProps.printDirection,
+          );
+
+          await printTask.printPage(encoded, serialConfig === undefined ? copies : 1);
+          await printTask.waitForPageFinished();
         }
-
-        const encoded: EncodedImage = ImageEncoder.encodeCanvas(
-          canvas,
-          options.pageColor,
-          options.labelProps.printDirection,
-        );
-
-        await printTask.printPage(encoded, copies);
-        await printTask.waitForPageFinished();
 
         printedCopies += copies;
         callbacks.onProgress?.(Math.floor((printedCopies / Math.max(1, totalCopies)) * 100));

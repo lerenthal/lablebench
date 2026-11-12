@@ -6,7 +6,20 @@ export type ConnectionState = "connecting" | "connected" | "disconnected";
 export type ConnectionType = "bluetooth" | "serial" | "capacitor-ble";
 
 export type LabelUnit = "mm" | "px";
-export type OjectType = "text" | "rectangle" | "line" | "circle" | "image" | "qrcode" | "barcode" | "aruco" | "pdf";
+export type OjectType =
+  | "text"
+  | "rectangle"
+  | "line"
+  | "circle"
+  | "image"
+  | "qrcode"
+  | "barcode"
+  | "aruco"
+  | "pdf"
+  /** A Date & time object — renders the moment it is printed. */
+  | "datetime"
+  /** A Serial number object — renders the next number from a central counter. */
+  | "serial";
 export type MoveDirection = "up" | "down" | "left" | "right";
 export type LabelShape = "rect" | "rounded_rect" | "circle";
 export type LabelSplit = "none" | "vertical" | "horizontal";
@@ -47,7 +60,18 @@ export type TemplateVariable = z.infer<typeof TemplateVariableSchema>;
 /** Serial-number auto-increment (§5.4). */
 export const SerialConfigSchema = z.object({
   variable: z.string().min(1),
+  /**
+   * The server-side counter this sequence draws from.
+   *
+   * The counter is what makes the number central: two workstations printing
+   * the same template draw from the same sequence instead of each counting
+   * from its own first row. Empty means "use the variable name", so every
+   * template that binds the same variable name shares one sequence.
+   */
+  counter: z.string().default(""),
   prefix: z.string().default(""),
+  /** Appended after the number — "SN-0042-A" reads better than "A-SN-0042". */
+  suffix: z.string().default(""),
   start: z.number().int().default(1),
   step: z.number().int().default(1),
   pad: z.number().int().min(0).max(20).default(0),

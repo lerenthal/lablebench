@@ -35,6 +35,16 @@
   import QrCodeParamsPanel from "$/components/designer-controls/QRCodeParamsControls.svelte";
   import TextParamsControls from "$/components/designer-controls/TextParamsControls.svelte";
   import VariableInsertControl from "$/components/designer-controls/VariableInsertControl.svelte";
+  import DynamicValueControls from "$/components/designer-controls/DynamicValueControls.svelte";
+  import SerialConfigControls from "$/components/designer-controls/SerialConfigControls.svelte";
+  import {
+    counterNameFor,
+    formatSerialValue,
+    previewSerialValue,
+    resolveDynamicObjects,
+  } from "$/utils/dynamic_values";
+  import { api } from "$/services/api";
+  import type { SerialConfig } from "$/types";
   import { DEFAULT_LABEL_PROPS, GRID_SIZE, OBJECT_DEFAULTS } from "$/defaults";
   import { LabelDesignerUtils } from "$/utils/label_designer_utils";
   import SavedLabelsMenu from "$/components/dialogs/SavedLabelsMenu.svelte";
@@ -78,6 +88,8 @@
   let editRevision = $state<number>(0);
   let printNow = $state<boolean>(false);
   let csvEnabled = $state<boolean>(false);
+  /** What the next printed label would show for the serial variable. */
+  let serialNextValue = $state<string | undefined>(undefined);
   let windowWidth = $state<number>(0);
   let undoState = $state<UndoState>({ undoDisabled: false, redoDisabled: false });
   let zoomText = $state<string>("100%");
@@ -227,6 +239,10 @@
 
     undo.push(fabricCanvas!, labelProps);
     hasUnsavedChanges = false;
+
+    // The loaded template may carry Date & time and Serial number objects;
+    // show them what they would print right now.
+    void refreshDynamicValues();
   };
 
   /**
@@ -263,7 +279,10 @@
    * tokens in its objects, plus anything already recorded.
    */
   const refreshDeclaredVariables = () => {
-    const found = extractVariablesFromJson(getCanvasForPreview() as { objects?: Array<{ text?: string }> });
+    const found = extractVariablesFromJson(
+      getCanvasForPreview() as { objects?: Array<{ text?: string; dynamicToken?: string }> },
+      templateVariables.serial?.variable,
+    );
     const known = new Map(templateVariables.variables.map((v) => [v.name, v]));
 
     for (const name of found) {
@@ -273,6 +292,82 @@
     }
 
     templateVariables = { ...templateVariables, variables: [...known.values()] };
+  };
+
+  /**
+   * The template's serial sequence, created on demand.
+   *
+   * The serial number comes from a central counter, so the sequence belongs to
+   * the template rather than to the object: every workstation that prints this
+   * template continues the same run of numbers.
+   */
+  const ensureSerialConfig = (): SerialConfig => {
+    const existing = templateVariables.serial;
+
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    const config: SerialConfig = {
+      variable: "serial",
+      counter: "",
+      prefix: "",
+      suffix: "",
+      start: 1,
+      step: 1,
+      pad: 4,
+    };
+
+    templateVariables = { ...templateVariables, serial: config };
+    hasUnsavedChanges = true;
+
+    return config;
+  };
+
+  /**
+   * Show the dynamic objects what they would print right now.
+   *
+   * The serial number is read from the central counter *without* consuming a
+   * number — a preview must not eat a value — so what is shown is the number
+   * the next print would use.
+   */
+  const refreshDynamicValues = async () => {
+    const config = templateVariables.serial;
+
+    if (config === undefined) {
+      resolveDynamicObjects(fabricCanvas!, undefined, {});
+      fabricCanvas?.requestRenderAll();
+      return;
+    }
+
+    let next: string | undefined;
+
+    try {
+      const counters = await api.listSerialCounters();
+      const counter = counters.find((c) => c.name === counterNameFor(config));
+
+      next =
+        counter === undefined
+          ? formatSerialValue(config.start, config)
+          : previewSerialValue(counter.value, config);
+    } catch {
+      next = undefined;
+    }
+
+    serialNextValue = next;
+
+    resolveDynamicObjects(
+      fabricCanvas!,
+      config.variable,
+      next === undefined ? {} : { [config.variable]: next },
+    );
+    fabricCanvas?.requestRenderAll();
+  };
+
+  const onSerialConfigChanged = (config: SerialConfig | undefined) => {
+    templateVariables = { ...templateVariables, serial: config };
+    hasUnsavedChanges = true;
+    void refreshDynamicValues();
   };
 
   const onTemplateVariablesChanged = (variables: TemplateVariables) => {
@@ -307,10 +402,20 @@
   };
 
   const onObjectPicked = (objectType: OjectType) => {
-    const obj = LabelDesignerObjectHelper.addObject(fabricCanvas!, objectType);
+    // A Serial number object needs a sequence to draw from. If the template
+    // has none yet, give it a default one rather than dropping an object that
+    // could never resolve.
+    let options: { dateTimeFormat?: string; serialVariable?: string } | undefined;
+
+    if (objectType === "serial") {
+      options = { serialVariable: ensureSerialConfig().variable };
+    }
+
+    const obj = LabelDesignerObjectHelper.addObject(fabricCanvas!, objectType, options);
     if (obj !== undefined) {
       fabricCanvas!.setActiveObject(obj);
       undo.push(fabricCanvas!, labelProps);
+      void refreshDynamicValues();
     }
   };
 
@@ -653,8 +758,18 @@
           <MdIcon icon="cancel_presentation" />
         </button>
 
-        <button class="btn btn-sm btn-secondary" onclick={() => (currentDialog = "saved_labels")}>
+        <!--
+          These two are how a template reaches the central server, and how one
+          comes back. They were bare icons, which is why the central store was
+          invisible: there was nothing on screen that said "templates live on
+          the server". Now they are labelled.
+        -->
+        <button
+          class="btn btn-sm btn-secondary"
+          title={$tr("params.saved_labels.menu_title")}
+          onclick={() => (currentDialog = "saved_labels")}>
           <MdIcon icon="sd_storage" />
+          {$tr("editor.save_load")}
         </button>
 
         <button
@@ -662,6 +777,7 @@
           title={$tr("templates.gallery")}
           onclick={() => (currentDialog = "quick_print")}>
           <MdIcon icon="bolt" />
+          {$tr("templates.gallery")}
         </button>
 
         <button
@@ -795,6 +911,19 @@
         {#if selectedObject instanceof fabric.IText || selectedObject instanceof QRCode || selectedObject instanceof Barcode}
           <VariableInsertControl {selectedObject} valueUpdated={controlValueUpdated} />
         {/if}
+
+        {#if selectedObject instanceof fabric.IText}
+          <DynamicValueControls
+            {selectedObject}
+            serialConfig={templateVariables.serial}
+            {serialNextValue}
+            {editRevision}
+            valueUpdated={controlValueUpdated} />
+        {/if}
+
+        <SerialConfigControls
+          serialConfig={templateVariables.serial}
+          onChange={onSerialConfigChanged} />
       </div>
     </div>
   </div>
@@ -807,6 +936,7 @@
       {printNow}
       {csvEnabled}
       model={templateModel}
+      serialConfig={templateVariables.serial}
       csvData={$csvData.data} />
   {:else if currentDialog === "label_props"}
     <LabelPropsEditor onClose={() => (currentDialog = "none")} onChange={onUpdateLabelProps} {labelProps} />

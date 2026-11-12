@@ -4,6 +4,12 @@ import { ArUcoMarker } from "$/fabric-object/aruco";
 import Barcode from "$/fabric-object/barcode";
 import { QRCode } from "$/fabric-object/qrcode";
 import type { OjectType } from "$/types";
+import {
+  DEFAULT_DATE_TIME_FORMAT,
+  dateTimeToken,
+  preprocessDateTime,
+  serialToken,
+} from "$/utils/dynamic_values";
 import { Toasts } from "$/utils/toasts";
 import { FileUtils } from "$/utils/file_utils";
 import { CanvasUtils } from "$/utils/canvas_utils";
@@ -93,6 +99,49 @@ export class LabelDesignerObjectHelper {
     return obj;
   }
 
+  /**
+   * A Date & time object.
+   *
+   * The canvas shows the moment it would produce right now; the token is kept
+   * on the object so the template stores `{dt|...}` rather than today's date.
+   */
+  static addDateTime(canvas: fabric.Canvas, format?: string): TextboxExt {
+    const usedFormat = format ?? DEFAULT_DATE_TIME_FORMAT;
+    const obj = new TextboxExt(preprocessDateTime(usedFormat), {
+      ...OBJECT_DEFAULTS_TEXT,
+    });
+
+    obj.dynamicToken = dateTimeToken(usedFormat);
+    // The value is decided at print time, so typing over it would only
+    // replace a live value with a dead one. The format is edited in the
+    // object's own panel instead.
+    obj.editable = false;
+
+    canvas.add(obj);
+    canvas.centerObject(obj);
+    return obj;
+  }
+
+  /**
+   * A Serial number object.
+   *
+   * The value comes from the template's central counter at print time. Until
+   * the counter has been read the object shows a placeholder rather than the
+   * raw token, so the label does not look broken on the canvas.
+   */
+  static addSerial(canvas: fabric.Canvas, variable: string): TextboxExt {
+    const obj = new TextboxExt("—", {
+      ...OBJECT_DEFAULTS_TEXT,
+    });
+
+    obj.dynamicToken = serialToken(variable);
+    obj.editable = false;
+
+    canvas.add(obj);
+    canvas.centerObject(obj);
+    return obj;
+  }
+
   static addStaticText(canvas: fabric.Canvas, text?: string, options?: Partial<fabric.TextProps>): fabric.FabricText {
     const obj = new fabric.FabricText(text ?? "Text", {
       ...OBJECT_DEFAULTS_TEXT,
@@ -166,7 +215,11 @@ export class LabelDesignerObjectHelper {
     return barcode;
   }
 
-  static addObject(canvas: fabric.Canvas, objType: OjectType): fabric.FabricObject | undefined {
+  static addObject(
+    canvas: fabric.Canvas,
+    objType: OjectType,
+    options?: { dateTimeFormat?: string; serialVariable?: string },
+  ): fabric.FabricObject | undefined {
     switch (objType) {
       case "text":
         return this.addText(canvas);
@@ -185,6 +238,10 @@ export class LabelDesignerObjectHelper {
         return this.addArUco(canvas);
       case "barcode":
         return this.addBarcode(canvas);
+      case "datetime":
+        return this.addDateTime(canvas, options?.dateTimeFormat);
+      case "serial":
+        return this.addSerial(canvas, options?.serialVariable ?? "serial");
     }
   }
 }

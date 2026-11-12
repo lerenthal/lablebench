@@ -68,6 +68,15 @@
     {$tr("editor.objectpicker.barcode")}
   </button>
 
+  <button class="btn me-1" onclick={() => onClick("datetime")}>
+    <MdIcon icon="schedule" />
+    {$tr("editor.objectpicker.datetime")}
+  </button>
+  <button class="btn me-1" onclick={() => onClick("serial")}>
+    <MdIcon icon="pin" />
+    {$tr("editor.objectpicker.serial")}
+  </button>
+
   <ZplImportButton {labelProps} onImageReady={zplReady} />
   <PdfImportButton {labelProps} onImageReady={pdfReady} />
 </AppModal>

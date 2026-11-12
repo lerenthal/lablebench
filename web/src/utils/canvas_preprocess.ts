@@ -1,37 +1,10 @@
 import * as fabric from "fabric";
-import dayjs, { ManipulateType } from "dayjs";
 import Barcode from "$/fabric-object/barcode";
 import QRCode from "$/fabric-object/qrcode";
 import { TextboxExt } from "$/fabric-object/textbox-ext";
-
-const VARIABLE_TEMPLATE_RX = /{\s*(\$?\w+)(?:([+-])(\d+)([yMwdhms]))?\s*(?:\|\s*(.*?)\s*)?}/g;
+import { DATE_TIME_KEY, VARIABLE_TEMPLATE_RX, preprocessDateTime } from "$/utils/dynamic_values";
 
 type Variables = Record<string, string>;
-
-const DATE_DURATION_UNITS: Record<string, ManipulateType> = {
-  y: "year",
-  M: "month",
-  w: "week",
-  d: "day",
-  h: "hour",
-  m: "minute",
-  s: "second",
-};
-
-const preprocessDateTime = (format?: string, sign?: string, amount?: string, unit?: string): string => {
-  let date = dayjs();
-
-  if (sign && amount && unit) {
-    const durationUnit = DATE_DURATION_UNITS[unit];
-
-    if (durationUnit) {
-      const value = Number(amount) * (sign === "-" ? -1 : 1);
-      date = date.add(value, durationUnit);
-    }
-  }
-
-  return date.format(format ?? "YYYY-MM-DD HH:mm:ss");
-};
 
 const preprocessString = (input: string, variables?: Variables): string => {
   let result = input;
@@ -77,7 +50,16 @@ export const canvasPreprocess = (canvas: fabric.Canvas, variables?: Variables): 
 
   canvas.forEachObject((obj: fabric.FabricObject) => {
     if (obj instanceof fabric.IText) {
-      const text = preprocessString(obj.text ?? "", processedVars);
+      // A dynamic object's text on the canvas is the value it was resolved to.
+      // The token it came from is what has to be resolved again — now, at
+      // print time, so the label carries today's date and the next serial
+      // number rather than the ones the template was designed with.
+      const source =
+        obj instanceof TextboxExt && obj.dynamicToken !== undefined
+          ? obj.dynamicToken
+          : (obj.text ?? "");
+
+      const text = preprocessString(source, processedVars);
 
       if (obj instanceof TextboxExt && obj.fontAutoSize) {
         obj.setAndShrinkText(text, obj.width);
@@ -119,7 +101,7 @@ export const extractVariables = (canvas: fabric.Canvas): string[] => {
 
     for (const match of text.matchAll(VARIABLE_TEMPLATE_RX)) {
       const key = match[1];
-      if (key !== undefined && key !== "dt" && !key.startsWith("$")) {
+      if (key !== undefined && key !== DATE_TIME_KEY && !key.startsWith("$")) {
         found.add(key);
       }
     }
@@ -131,21 +113,37 @@ export const extractVariables = (canvas: fabric.Canvas): string[] => {
 /**
  * Collect the merge variables referenced by a serialised canvas document,
  * without instantiating a Fabric canvas.
+ *
+ * @param serialVariable the name of the template's serial variable, when it
+ *   has one. It is filled from a central counter, not from a CSV column, so it
+ *   must not be reported as a missing column.
  */
-export const extractVariablesFromJson = (fabricJson: {
-  objects?: Array<{ text?: string }>;
-}): string[] => {
+export const extractVariablesFromJson = (
+  fabricJson: {
+    objects?: Array<{ text?: string; dynamicToken?: string }>;
+  },
+  serialVariable?: string,
+): string[] => {
   const found = new Set<string>();
 
   for (const obj of fabricJson.objects ?? []) {
-    const text = obj.text;
+    // A dynamic object stores the token it was resolved from; its `text` is the
+    // value it was resolved to, which would otherwise be scanned as if it were
+    // a placeholder.
+    const text = obj.dynamicToken ?? obj.text;
+
     if (typeof text !== "string") {
       continue;
     }
 
     for (const match of text.matchAll(VARIABLE_TEMPLATE_RX)) {
       const key = match[1];
-      if (key !== undefined && key !== "dt" && !key.startsWith("$")) {
+      if (
+        key !== undefined &&
+        key !== DATE_TIME_KEY &&
+        key !== serialVariable &&
+        !key.startsWith("$")
+      ) {
         found.add(key);
       }
     }
