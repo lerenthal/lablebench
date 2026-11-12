@@ -1,8 +1,10 @@
 <script lang="ts">
   import {
-  AutoShutdownTime,
+    AutoShutdownTime,
     LabelType,
+    NiimbotBluetoothClient,
     NiimbotCapacitorBleClient,
+    NiimbotSerialClient,
     ResolutionClass,
     SoundSettingsItemType,
     Utils,
@@ -30,10 +32,36 @@
   import type { MaterialIcon } from "material-icons";
   import FirmwareUpdater from "$/components/basic/FirmwareUpdater.svelte";
   import PrinterVerboseInfo from "$/components/dialogs/PrinterVerboseInfo.svelte";
+  import {
+    detectConnectedDevice,
+    listGrantedDevices,
+    reconnectCandidates,
+    rememberDevice,
+    type GrantedDevice,
+    type GrantTransport,
+  } from "$/services/device_grants";
 
   let connectionType = $state<ConnectionType>("bluetooth");
   let featureSupport = $state<AvailableTransports>({ webBluetooth: false, webSerial: false, capacitorBle: false });
   let verboseInfoShow = $state<boolean>(false);
+  /** Printers this machine is already allowed to use — the one-click targets. */
+  let reconnectTargets = $state<GrantedDevice[]>([]);
+
+  /** Capacitor BLE is a native plugin, so it has no browser grant concept. */
+  const transportFor = (type: ConnectionType): GrantTransport | undefined => {
+    if (type === "bluetooth") {
+      return "bluetooth";
+    }
+    if (type === "serial") {
+      return "serial";
+    }
+    return undefined;
+  };
+
+  const refreshReconnectTargets = async () => {
+    const transport = transportFor(connectionType);
+    reconnectTargets = transport === undefined ? [] : await reconnectCandidates(transport);
+  };
 
   const percentage = (cur?: number, total?: number) => {
     if (cur === undefined || total === undefined) {
@@ -44,6 +72,11 @@
   };
 
   const onConnectClicked = async () => {
+    const transport = transportFor(connectionType);
+    // The ports present before the picker opens, so the newly granted one can
+    // be identified afterwards.
+    const before = transport === undefined ? [] : await listGrantedDevices(transport);
+
     initClient(connectionType);
     connectionState.set("connecting");
 
@@ -53,6 +86,38 @@
       } else {
         await $printerClient.connect();
       }
+
+      if (transport !== undefined) {
+        rememberDevice(await detectConnectedDevice(transport, before));
+      }
+    } catch (e) {
+      connectionState.set("disconnected");
+      Toasts.error(e);
+    }
+
+    await refreshReconnectTargets();
+  };
+
+  /**
+   * Reconnect to a printer this machine is already allowed to use.
+   *
+   * The browser keeps the grant, so no picker appears and no permission is
+   * re-asked — this is the "the printer moved here" path, in one click.
+   */
+  const onReconnectClicked = async (device: GrantedDevice) => {
+    initClient(device.transport === "bluetooth" ? "bluetooth" : "serial");
+    connectionState.set("connecting");
+
+    try {
+      if (device.transport === "bluetooth" && $printerClient instanceof NiimbotBluetoothClient) {
+        await $printerClient.connect({ authorizedDevice: device.handle as BluetoothDevice });
+      } else if (device.transport === "serial" && $printerClient instanceof NiimbotSerialClient) {
+        await $printerClient.connect({ authorizedPort: device.handle as SerialPort });
+      } else {
+        throw new Error("The printer transport changed. Please pick the device again.");
+      }
+
+      rememberDevice(device);
     } catch (e) {
       connectionState.set("disconnected");
       Toasts.error(e);
@@ -78,6 +143,7 @@
   const switchConnectionType = (c: ConnectionType) => {
     LocalStoragePersistence.saveLastConnectionType(c);
     connectionType = c;
+    refreshReconnectTargets();
   };
 
   const batteryIcon = (value: number): MaterialIcon => {
@@ -130,6 +196,10 @@
     if ($automation !== undefined && $automation.autoConnect && connectionType === "capacitor-ble") {
       onConnectClicked();
     }
+
+    // The browser already knows which printers this machine may use. Offer
+    // them for one-click reconnect as soon as the connector is shown.
+    refreshReconnectTargets();
   });
 </script>
 
@@ -333,6 +403,30 @@
         <MdIcon icon="usb" />
         Capacitor BLE
       </button>
+    {/if}
+
+    {#if reconnectTargets.length > 0}
+      <div class="btn-group btn-group-sm">
+        <button
+          type="button"
+          class="btn btn-outline-success dropdown-toggle"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+          title={$tr("connector.reconnect")}>
+          <MdIcon icon="link" />
+          {reconnectTargets[0]!.name}
+        </button>
+        <ul class="dropdown-menu">
+          {#each reconnectTargets as device (device.key)}
+            <li>
+              <button class="dropdown-item" onclick={() => onReconnectClicked(device)}>
+                <MdIcon icon={device.transport === "bluetooth" ? "bluetooth" : "usb"} />
+                {device.name}
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
     {/if}
   {/if}
 
