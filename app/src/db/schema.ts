@@ -93,4 +93,20 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    id: "002_serial_counters",
+    up: (db) => {
+      db.exec(`
+        -- §5.4: the serial number printed on a label must be unique across
+        -- every workstation and every batch, so the counter lives on the
+        -- server rather than being derived from the CSV row index.
+        -- One row per counter name; the value is the last number handed out.
+        CREATE TABLE serial_counters (
+          name       TEXT PRIMARY KEY,
+          value      INTEGER NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      `);
+    },
+  },
 ];

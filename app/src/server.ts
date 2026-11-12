@@ -16,7 +16,7 @@ import fastifyStatic from "@fastify/static";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db/index.js";
 import { authenticate, isAuthorized, rejectUnauthorized } from "./auth/index.js";
-import { registerHealthRoute, registerTemplateRoutes } from "./routes/api.js";
+import { registerHealthRoute, registerSerialRoutes, registerTemplateRoutes } from "./routes/api.js";
 import { AssetService } from "./services/assets.js";
 import { TemplateService } from "./services/templates.js";
 
@@ -28,6 +28,12 @@ export async function buildServer() {
       level: process.env.LOG_LEVEL ?? "info",
     },
     bodyLimit: 32 * 1024 * 1024,
+    routerOptions: {
+      // The default (100) is shorter than the longest legal serial counter
+      // name, so the router would answer 414 instead of letting the route
+      // reject it with a proper validation error.
+      maxParamLength: 256,
+    },
   });
 
   app.decorate("config", config);
@@ -63,6 +69,7 @@ export async function buildServer() {
 
   registerHealthRoute(app);
   registerTemplateRoutes(app, { templates, assets });
+  registerSerialRoutes(app);
 
   // Serve the built SPA. Unknown paths fall through to index.html so the
   // client-side router owns navigation.

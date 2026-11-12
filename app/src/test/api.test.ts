@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { buildServer } from "../server.js";
+import { openDb } from "../db/index.js";
+import { nextValue } from "../services/serial.js";
 
 let app: Awaited<ReturnType<typeof buildServer>>;
 let dataDir: string;
@@ -204,6 +206,196 @@ describe("assets", () => {
   it("404s on an unknown asset", async () => {
     const res = await app.inject({ method: "GET", url: "/api/assets/nope" });
     assert.equal(res.statusCode, 404);
+  });
+});
+
+describe("serial counters", () => {
+  it("returns 1 on the first allocation", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/labels/next",
+      payload: {},
+    });
+
+    assert.equal(res.statusCode, 200);
+    const body = res.json();
+    assert.equal(body.name, "labels");
+    assert.equal(body.value, 1);
+    assert.ok(body.updated_at);
+  });
+
+  it("honours start and step", async () => {
+    const opts = { start: 100, step: 5 };
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/lot-42/next",
+      payload: opts,
+    });
+    assert.equal(first.statusCode, 200);
+    assert.equal(first.json().value, 100);
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/lot-42/next",
+      payload: opts,
+    });
+    assert.equal(second.json().value, 105);
+
+    const third = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/lot-42/next",
+      payload: opts,
+    });
+    assert.equal(third.json().value, 110);
+  });
+
+  it("never hands out the same number twice", async () => {
+    const seen = new Set<number>();
+
+    for (let i = 0; i < 25; i += 1) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/serial-counters/unique/next",
+        payload: {},
+      });
+
+      assert.equal(res.statusCode, 200);
+      const value = res.json().value as number;
+      assert.equal(seen.has(value), false);
+      seen.add(value);
+    }
+
+    assert.equal(seen.size, 25);
+  });
+
+  it("resets a counter and continues from there", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/resettable/next",
+      payload: { start: 10, step: 2 },
+    });
+
+    const reset = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/resettable/reset",
+      payload: { value: 500 },
+    });
+
+    assert.equal(reset.statusCode, 200);
+    assert.equal(reset.json().value, 500);
+
+    // The stored value is the last number handed out, so the next allocation
+    // continues from the reset point.
+    const next = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/resettable/next",
+      payload: { step: 2 },
+    });
+
+    assert.equal(next.json().value, 502);
+  });
+
+  it("resets to 0 when no value is given", async () => {
+    const reset = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/zeroed/reset",
+      payload: {},
+    });
+
+    assert.equal(reset.statusCode, 200);
+    assert.equal(reset.json().value, 0);
+
+    const next = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/zeroed/next",
+      payload: {},
+    });
+
+    assert.equal(next.json().value, 1);
+  });
+
+  it("lists the counters", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/serial-counters" });
+
+    assert.equal(res.statusCode, 200);
+    const counters = res.json().counters as Array<{ name: string; value: number }>;
+    const labels = counters.find((counter) => counter.name === "labels");
+
+    assert.ok(labels);
+    assert.equal(labels.value, 1);
+  });
+
+  it("keeps the counter across a restart", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "labelbench-serial-"));
+    const path = join(dir, "serial.db");
+
+    try {
+      const first = openDb({ path });
+      const allocated = nextValue(first, "durable");
+      assert.equal(allocated.value, 1);
+      first.close();
+
+      // Reopen the same file: the counter must not restart.
+      const second = openDb({ path });
+      const resumed = nextValue(second, "durable");
+      assert.equal(resumed.value, 2);
+      second.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an invalid counter name", async () => {
+    const empty = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters//next",
+      payload: {},
+    });
+    assert.equal(empty.statusCode, 400);
+    assert.equal(empty.json().error, "invalid_counter");
+
+    const tooLong = await app.inject({
+      method: "POST",
+      url: `/api/serial-counters/${"x".repeat(129)}/next`,
+      payload: {},
+    });
+    assert.equal(tooLong.statusCode, 400);
+    assert.equal(tooLong.json().error, "invalid_counter");
+
+    const controlChar = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/bad%00name/next",
+      payload: {},
+    });
+    assert.equal(controlChar.statusCode, 400);
+    assert.equal(controlChar.json().error, "invalid_counter");
+
+    // The service rejects a bad name too, so a caller that skips the route
+    // cannot slip an invalid name into the database.
+    assert.throws(
+      () => nextValue(app.db, ""),
+      /Invalid serial counter name/,
+    );
+    assert.throws(
+      () => nextValue(app.db, "x".repeat(129)),
+      /Invalid serial counter name/,
+    );
+    assert.throws(
+      () => nextValue(app.db, "bad\u0000name"),
+      /Invalid serial counter name/,
+    );
+  });
+
+  it("rejects an invalid body", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/serial-counters/labels/next",
+      payload: { step: 1.5 },
+    });
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error, "invalid_counter");
   });
 });
 
