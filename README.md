@@ -353,6 +353,12 @@ the certificate carries the address as a SAN and the server answers on both.
 
 ### Where the printer has to be
 
+> **Chrome on Linux does not implement Web Bluetooth.** `navigator.bluetooth`
+> is `undefined` there, so a D11 — which connects over Bluetooth — needs a
+> Windows, macOS or ChromeOS workstation. The LabelWriter goes over USB and
+> works from Chrome on Linux. Measured on the reference host with Chrome 157.
+
+
 Printing is **browser-direct**, and that is the whole design: the browser on
 the workstation in front of you talks to the printer plugged into *that*
 workstation over Web Bluetooth or Web Serial. The server never touches a
@@ -465,18 +471,25 @@ document, the declared variables and references to any uploaded images or fonts.
 
 ## Backup and restore
 
-Two things, and that is all of it:
+Two things hold state: the SQLite database and the uploaded assets. Both are
+taken by one script, with the app still running:
 
 ```bash
-# the SQLite file
-docker compose exec app sh -c 'cat /data/labelbench.db' > labelbench.db
-
-# the asset directory
-docker run --rm -v labelbench_labelbench-data:/data -v "$PWD":/backup alpine \
-  tar czf /backup/assets.tgz -C /data assets
+./scripts/backup.sh            # writes to ./backups and verifies the result
 ```
 
-Restore by putting both back into the `labelbench-data` volume.
+**Do not copy the database file directly.** The database runs in WAL mode, so
+recent transactions live in `labelbench.db-wal` and not in the main file, and
+a plain copy can produce a file with no tables in it at all — measured on the
+reference host, the naive copy was 4096 bytes and raised `no such table:
+template`, while the snapshot the script takes is 81920 bytes and passes
+`PRAGMA integrity_check`. The script uses SQLite's online backup API
+instead, which takes a consistent snapshot without stopping anything, and
+it checks what it wrote.
+
+Restore by stopping the app and putting both back into the
+`labelbench-data` volume; the full procedure, including the ownership the
+container needs, is in [docs/PRODUCTION-INSTALL.md](docs/PRODUCTION-INSTALL.md#8-backup-and-restore).
 
 ---
 

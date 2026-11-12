@@ -963,9 +963,11 @@ way.
    server certificate with it, breaking every workstation's trust. Always
    export `CAROOT` when using that script.
 
-7. **There is no backup script, no backup scheduler and no restore tool in
-   the repository.** Section 8 gives the procedure; wrapping it in a script
-   and a cron entry is left to the operator.
+7. **There is no backup scheduler and no restore tool in the repository.**
+   The backup itself ships as `scripts/backup.sh`, so the cron entry in
+   section 8 works as written; the schedule and the off-site copy are the
+   operator's. There is no restore tool: the restore is the procedure in
+   section 8.
 
 8. **No user accounts, no roles, no audit trail.** With the API key gate on,
    every request is authenticated by the same shared secret and the actor is

@@ -198,12 +198,12 @@ else
       amd64|arm64) : ;;
       *) die "No mkcert binary for architecture '$mk_arch'. Install mkcert manually and re-run." ;;
     esac
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
-    curl -fsSL "$MKCERT_UPSTREAM_URL?for=linux/$mk_arch" -o "$tmp/mkcert"
-    install -m 0755 "$tmp/mkcert" /usr/local/bin/mkcert
-    rm -rf "$tmp"
-    trap - EXIT
+    # Downloaded to a single temporary file and removed with `rm -f`. No
+    # directory is created and removed recursively anywhere on the system.
+    tmp_bin="$(mktemp)"
+    curl -fsSL "$MKCERT_UPSTREAM_URL?for=linux/$mk_arch" -o "$tmp_bin"
+    install -m 0755 "$tmp_bin" /usr/local/bin/mkcert
+    rm -f "$tmp_bin"
     info "installed to /usr/local/bin/mkcert"
   fi
   info "mkcert: $(mkcert -version 2>/dev/null || echo 'version unknown')"
