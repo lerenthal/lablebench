@@ -409,5 +409,10 @@
   "help.serial_body": "A date or a serial number is a token. The canvas shows what it looks like now, but the template keeps the token, so every copy of the label differs. The serial number comes from a counter on the server, so two workstations printing at the same time never get the same number. Select the serial number object to set its counter, prefix, suffix, start, step and padding.",
   "params.label.common_sizes": "Sizes that fit this printer",
   "editor.label_props": "Label size, shape and print direction",
-  "editor.gallery": "Gallery"
+  "editor.gallery": "Gallery",
+  "connector.dymo": "LabelWriter",
+  "connector.dymo.hint": "Connect a DYMO LabelWriter over USB. The browser will ask which device to use.",
+  "connector.disconnect": "Disconnect",
+  "templates.dymo450": "DYMO LabelWriter 450 (USB)",
+  "model.dymo450": "Dymo 450"
 }

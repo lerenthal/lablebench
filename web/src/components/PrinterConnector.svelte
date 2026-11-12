@@ -12,6 +12,8 @@
   } from "@mmote/niimbluelib";
   import {
     printerClient,
+    printerKind,
+    dymoConnection,
     connectedPrinterName,
     connectionState,
     initClient,
@@ -23,6 +25,7 @@
     rfidInfo,
     dimensionsUpdateRequest,
   } from "$/stores/app";
+  import { connectDymo, disconnectDymo } from "$/utils/dymo";
   import type { ConnectionType } from "$/types";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import MdIcon from "$/components/basic/MdIcon.svelte";
@@ -43,6 +46,8 @@
 
   let connectionType = $state<ConnectionType>("bluetooth");
   let featureSupport = $state<AvailableTransports>({ webBluetooth: false, webSerial: false, capacitorBle: false });
+  /** WebUSB, which is how a DYMO LabelWriter is reached. */
+  let webUsbSupported = $state<boolean>(false);
   let verboseInfoShow = $state<boolean>(false);
   /** Printers this machine is already allowed to use — the one-click targets. */
   let reconnectTargets = $state<GrantedDevice[]>([]);
@@ -124,6 +129,42 @@
     }
   };
 
+  /**
+   * Connect a DYMO LabelWriter over USB.
+   *
+   * The browser's USB picker has to be opened from a user gesture, so this
+   * is wired straight to the button. WebUSB needs a secure context, which
+   * is why the app is served from a trusted certificate.
+   */
+  const onDymoConnectClicked = async () => {
+    connectionState.set("connecting");
+
+    try {
+      const connection = await connectDymo();
+      dymoConnection.set(connection);
+      printerKind.set("dymo");
+      connectedPrinterName.set(connection.model);
+      connectionState.set("connected");
+    } catch (e) {
+      console.error(e);
+      connectionState.set("disconnected");
+      Toasts.error(e);
+    }
+  };
+
+  const onDymoDisconnectClicked = async () => {
+    const connection = $dymoConnection;
+
+    if (connection !== undefined) {
+      await disconnectDymo(connection);
+    }
+
+    dymoConnection.set(undefined);
+    printerKind.set("niim");
+    connectedPrinterName.set("");
+    connectionState.set("disconnected");
+  };
+
   const onDisconnectClicked = () => {
     $printerClient.disconnect();
   };
@@ -180,6 +221,7 @@
 
   onMount(() => {
     featureSupport = Utils.getAvailableTransports();
+    webUsbSupported = typeof navigator !== "undefined" && "usb" in navigator;
 
     connectionType = LocalStoragePersistence.loadLastConnectionType() ?? "bluetooth";
 
@@ -210,6 +252,13 @@
     </button>
 
     <div class="dropdown-menu p-3">
+      {#if $printerKind === "dymo"}
+        <div class="text-secondary">{$tr("connector.dymo")}</div>
+        <div class="mb-2">{$connectedPrinterName}</div>
+        <button class="btn btn-sm btn-secondary" onclick={onDymoDisconnectClicked}>
+          {$tr("connector.disconnect")}
+        </button>
+      {:else}
       {#if $printerInfo}
         <div class="text-secondary">{$tr("connector.device_version")}</div>
 
@@ -360,6 +409,7 @@
           <button class="btn btn-sm btn-primary" onclick={reset}>Reset</button>
         </div>
       </div>
+      {/if}
     </div>
 
     <span class="input-group-text">
@@ -402,6 +452,17 @@
         onclick={() => switchConnectionType((connectionType = "capacitor-ble"))}>
         <MdIcon icon="usb" />
         Capacitor BLE
+      </button>
+    {/if}
+
+    {#if webUsbSupported}
+      <button
+        disabled={$connectionState === "connecting"}
+        class="btn text-nowrap btn-outline-secondary"
+        onclick={onDymoConnectClicked}
+        title={$tr("connector.dymo.hint")}>
+        <MdIcon icon="usb" />
+        {$tr("connector.dymo")}
       </button>
     {/if}
 

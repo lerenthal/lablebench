@@ -21,10 +21,10 @@
  */
 
 import { PrinterModel, getPrinterMetaByModel } from "@mmote/niimbluelib";
-import type { TemplateModel } from "$/types";
+import { PRINT_HEAD_PIXELS, type TemplateModel } from "$/types";
 
 /** The template's target model → the library's model enum. */
-const MODEL_ENUM: Record<TemplateModel, PrinterModel> = {
+const MODEL_ENUM: Partial<Record<TemplateModel, PrinterModel>> = {
   d11: PrinterModel.D11,
   b21: PrinterModel.B21,
 };
@@ -39,7 +39,13 @@ export const headWidthForModel = (model: TemplateModel | undefined): number | un
     return undefined;
   }
 
-  const meta = getPrinterMetaByModel(MODEL_ENUM[model]);
+  // The LabelWriter is not a NIIMBOT and the library knows nothing about it.
+  // Its head width is in the app's own table.
+  if (MODEL_ENUM[model] === undefined) {
+    return PRINT_HEAD_PIXELS[model];
+  }
+
+  const meta = getPrinterMetaByModel(MODEL_ENUM[model]!);
   return meta?.printheadPixels;
 };
 
@@ -56,7 +62,12 @@ export const densityRangeForModel = (
     return undefined;
   }
 
-  const meta = getPrinterMetaByModel(MODEL_ENUM[model]);
+  if (MODEL_ENUM[model] === undefined) {
+    // The LabelWriter takes a density in its own terms, not the NIIMBOT's.
+    return undefined;
+  }
+
+  const meta = getPrinterMetaByModel(MODEL_ENUM[model]!);
   if (meta === undefined) {
     return undefined;
   }

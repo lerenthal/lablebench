@@ -2,42 +2,84 @@
 
 ## The recommendation
 
-**Build it later, and only after the NIIMBOT path is proven on hardware. Do not
-build it yet.**
+**Build it. The lab's LabelWriter 450 over USB is the good case, and it is now
+built.**
 
-The one thing that could have killed this turned out to be fine: there is a
-maintained, MIT-licensed, TypeScript driver suite with a **browser WebUSB**
-package, and it needs exactly the environment LabelBench already has —
-Chrome or Edge, and a page served over HTTPS. That is the same requirement
-as Web Bluetooth and Web Serial, which the app already depends on. So the
-transport is not the obstacle.
+The transport turned out to be the easy part. There is a maintained,
+MIT-licensed, TypeScript driver suite with a **browser WebUSB** package, and
+it needs exactly the environment LabelBench already has — Chrome or Edge,
+and a page served over HTTPS. That is the same requirement as Web Bluetooth
+and Web Serial, which the app already depends on. No vendor driver, no
+native helper, no cloud call.
 
-The obstacles are elsewhere, and they are about *which* DYMO you own and
-*when*:
+The 450 is the right model in the driver suite: it has **no NFC media lock**
+(unlike the 550 and 5XL), so ordinary DYMO rolls print, and it is a plain
+USB device. The one thing to know is that the driver lists the 450 as
+*expected* rather than *verified* — which is exactly what the bench test
+below settles.
 
-1. **The driver suite does not cover the consumer DYMO printers.** Its
-   supported list is 22 models — the LabelWriter 300/330/400/450/550/5XL
-   line and their Duos and Turbos — and it contains **neither the LabelWriter
-   Connect nor the LabelWriter 5S**. If the lab's DYMO is a Connect or a 5S,
-   there is no browser path at all, and the fallback requires the DYMO
-   Connect desktop software installed on every workstation, which breaks the
-   "no native helper" architecture the whole app is built on.
-2. **The 550 and 5XL enforce an NFC media lock.** Only genuine DYMO media
-   prints, and the NFC-defined length overrides what the host asks for
-   silently. That is a media-procurement decision, not a code problem, but
-   it has to be made before the work starts.
-3. **DYMO prints at 300 dpi; LabelBench's label canvas is 203 dpi.** This is
-   the real engineering work, and it is not in the transport — see
-   "The rendering path" below. The fix is to store label geometry in
-   physical units and rasterise per printer, which touches the template
-   format.
-4. **The NIIMBOT path is not yet proven on hardware.** The D11 has never
-   printed from this app, and the `D11_V1` versus `D110` framing question is
-   still open. Proving the existing stack is worth more than starting a
-   second one.
+### What was built
 
-**The decision therefore depends on one fact only: which DYMO does the lab
-have?** See "What to check" at the end.
+The LabelWriter path is implemented and deployed:
+
+- **A `dymo450` model** beside D11 and B21, with the head width (672 dots
+  at 300 dpi, which is 456 pixels at the app's native 8 px/mm).
+- **The label sizes, taken from the driver's own media registry** — 20 of
+  them, from "19×10mm Price Tag (2-up)" to "102×57mm Name Badge". Nothing is
+  typed in by hand: the registry knows the length of every roll in dots, and
+  the app works out the printable size from it.
+- **A WebUSB connection** in the printer connector. The browser's USB picker
+  opens from a button, the way the Bluetooth and serial connections do.
+- **A print path** that renders the label at the LabelWriter's own 300 dpi
+  and composes it into the bitmap the driver asks for: the full width of the
+  print head, the printable length of the media, the label centred across
+  the head.
+
+### The resolution question, answered
+
+The question was whether 300 dpi was wanted. It turns out it does **not**
+require a change to the template format, and this was the finding that
+changed the estimate.
+
+The label stays in canvas pixels at 203 dpi. At print time it is *re-rendered*
+at the head's resolution — the text is laid out and rasterised afresh at 300
+dpi, not enlarged from a 203 dpi bitmap — and then composed into the bitmap
+the driver expects. So the NIIMBOT keeps its 203 dpi exactly as it was, and
+the LabelWriter gets the resolution it is capable of, without a migration
+and without changing a single stored template.
+
+### What is not done, and what the bench test has to settle
+
+1. **The CSV batch runner still prints through the NIIMBOT path.** The
+   manual print path is the LabelWriter's; the batch runner is not yet
+   wired to it. A batch on a LabelWriter needs the same treatment the
+   manual path has had.
+2. **The geometry has never run against hardware.** Two numbers are
+   derived from the driver's registry rather than measured: the 6 mm
+   leading dead zone at the start of the media, and the fact that a label
+   narrower than the head is centred across it. Both are in one place —
+   `web/src/utils/dymo.ts` — so a correction is a one-line change. The
+   first print is expected to be off by a few millimetres in the feed
+   direction, and the test below says what to look at.
+3. **The 450 is listed as *expected*, not *verified*, by the driver.** The
+   bench test is what promotes it.
+
+### The bench test
+
+One session at the bench with the 450 plugged into a workstation:
+
+1. Open the app, pick **Dymo 450** as the model, and choose the media that
+   matches the roll in the printer — the sizes are named after the roll.
+2. Connect the printer: **LabelWriter** in the app bar, then pick the device
+   in the browser's USB dialog.
+3. Design something small — a batch number and a date, at a readable size.
+4. **Print preview** first, to see the raster, then **Print** one copy.
+5. Look at the label: is it the right size, is it centred across the head,
+   and is it the right distance from the leading edge? If it is offset along
+   the roll, the dead zone in `dymo.ts` is the number to change.
+
+The full path — the USB picker, the connection, the model, the sizes — is
+already in place, so the test is about the geometry, not about plumbing.
 
 ---
 
@@ -303,6 +345,11 @@ wanted?** The NIIMBOT B21 prints at 203 dpi and produces perfectly legible
 labels. If the DYMO is wanted for its connectivity rather than its
 resolution, the resolution mismatch — the expensive part — may not need
 solving at all.
+
+> **Answered.** 300 dpi is not wanted, and it does not need to be bought: the
+> label is re-rendered for whichever head is going to burn it, so the
+> NIIMBOT stays at 203 dpi and the LabelWriter gets 300 dpi, with no
+> migration in between.
 
 ---
 

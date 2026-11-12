@@ -3,7 +3,7 @@
   import { derived } from "svelte/store";
   import { allocateSerialValues, peekSerialValues } from "$/utils/dynamic_values";
   import type { SerialConfig } from "$/types";
-  import { connectionState, printerClient, printerInfo, printerMeta, rfidInfo } from "$/stores/app";
+  import { connectionState, dymoConnection, printerClient, printerInfo, printerKind, printerMeta, rfidInfo } from "$/stores/app";
   import * as effects from "$/utils/post_process";
   import {
     type EncodedImage,
@@ -21,6 +21,7 @@
   } from "@mmote/niimbluelib";
   import { type LabelProps, type PostProcessType, type FabricJson, type PreviewProps, type TemplateModel, previewPropsKeys } from "$/types";
   import { evaluateWidth, headWidthForModel, printableWidth } from "$/utils/print_limits";
+  import { DOTS_PER_CANVAS_PX, dymoEngine, dymoGeometry, printDymoLabel } from "$/utils/dymo";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import { canvasPreprocess } from "$/utils/canvas_preprocess";
@@ -80,6 +81,16 @@
    * warned about. The batch runner rejects such a row the same way.
    */
   let widthBlocked = $state<string>("");
+  /**
+   * How much bigger than the app's canvas the label is rendered.
+   *
+   * The NIIMBOT prints at 203 dpi, which is the app's native resolution, so
+   * a canvas pixel is a dot. A LabelWriter prints at 300 dpi, so its label
+   * is rendered at that resolution — the text is laid out and rasterised
+   * afresh for the head rather than enlarged from a 203 dpi bitmap, which
+   * is the difference between a legible 6 pt number and a soft one.
+   */
+  let renderScale = $state<number>(1);
   /**
    * The label is wider than the head of the model the template targets.
    * A wider printer will still print it, so this warns rather than blocks.
@@ -145,7 +156,86 @@
     FileUtils.printImageUrls(sources);
   };
 
+  /**
+   * Print to a DYMO LabelWriter.
+   *
+   * The LabelWriter takes a bitmap rather than an encoded raster, and it is
+   * reached over WebUSB instead of Bluetooth or serial, so the print path
+   * is separate from the NIIMBOT one rather than a variation on it.
+   */
+  const onPrintDymo = async () => {
+    printState = "printing";
+    error = "";
+
+    const connection = $dymoConnection;
+
+    if (connection === undefined) {
+      error = $tr("connector.dymo.hint");
+      printState = "idle";
+      return;
+    }
+
+    try {
+      const engine = dymoEngine(connection);
+
+      for (let pageIdx = 0; pageIdx < pagesTotal; pageIdx++) {
+        currentPage = pageIdx;
+
+        if (serialConfig === undefined) {
+          await generatePreviewData(currentPage);
+
+          if (widthBlocked !== "") {
+            throw new Error(widthBlocked);
+          }
+
+          const geometry = dymoGeometry({
+            canvasWidth: previewCanvas.width,
+            canvasHeight: previewCanvas.height,
+            engine,
+          });
+
+          await printDymoLabel(connection, previewCanvas, geometry);
+          continue;
+        }
+
+        // A serial sequence means every copy is its own label, so each one
+        // takes the next number from the central counter.
+        for (let copy = 0; copy < params.quantity; copy++) {
+          const serialValues = await allocateSerialValues(serialConfig);
+
+          await generatePreviewData(currentPage, serialValues);
+
+          if (widthBlocked !== "") {
+            throw new Error(widthBlocked);
+          }
+
+          const geometry = dymoGeometry({
+            canvasWidth: previewCanvas.width,
+            canvasHeight: previewCanvas.height,
+            engine,
+          });
+
+          await printDymoLabel(connection, previewCanvas, geometry);
+        }
+      }
+    } catch (e) {
+      error = `${e}`;
+      console.error(e);
+    }
+
+    printState = "idle";
+
+    if (printNow && !error) {
+      modalRef.hide();
+    }
+  };
+
   const onPrint = async () => {
+    if ($printerKind === "dymo") {
+      await onPrintDymo();
+      return;
+    }
+
     printState = "printing";
     error = "";
 
@@ -254,6 +344,12 @@
     }
   };
 
+  // The LabelWriter prints at 300 dpi and the NIIMBOT at 203, so the label
+  // is rendered for whichever head is going to burn it.
+  $effect(() => {
+    renderScale = $printerKind === "dymo" ? DOTS_PER_CANVAS_PX : 1;
+  });
+
   const updatePreview = () => {
     let iData: ImageData = effects.copyImageData(originalImage);
 
@@ -307,7 +403,11 @@
 
     let headSize = -1;
 
-    if ($printerInfo?.printheadWidth !== undefined) {
+    if ($printerKind === "dymo") {
+      // A LabelWriter's head width is known from its model, not reported
+      // over the wire the way a NIIMBOT reports its own.
+      headSize = headWidthForModel(model) ?? -1;
+    } else if ($printerInfo?.printheadWidth !== undefined) {
       headSize = $printerInfo.printheadWidth;
     } else if ($printerMeta?.printheadPixels !== undefined) {
       headSize = $printerMeta.printheadPixels;
@@ -315,8 +415,11 @@
 
     // The device limit blocks the print; the model's limit warns, because a
     // wider printer will still print it.
+    // The preview is rendered at the printer's own resolution, so the width
+    // it measures is in dots. It is put back into the app's canvas pixels
+    // before it is compared with a head width, which is always in those.
     const evaluation = evaluateWidth(
-      printableWidth(previewCanvas, labelProps.printDirection),
+      printableWidth(previewCanvas, labelProps.printDirection) / renderScale,
       headSize === -1 ? undefined : headSize,
       headWidthForModel(model),
     );
@@ -453,7 +556,7 @@
 
     fabricTempCanvas.requestRenderAll();
 
-    const preRenderedCanvas = fabricTempCanvas.toCanvasElement();
+    const preRenderedCanvas = fabricTempCanvas.toCanvasElement(renderScale);
     const ctx = preRenderedCanvas.getContext("2d")!;
     previewCanvas.width = preRenderedCanvas.width;
     previewCanvas.height = preRenderedCanvas.height;
