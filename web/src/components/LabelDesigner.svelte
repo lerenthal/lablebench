@@ -734,155 +734,282 @@
       renderOnFontsChanged();
     }
   });
+
+  // --- canvas zoom ----------------------------------------------------------------
+  /**
+   * The scrollable area the label is drawn in.
+   *
+   * "Fit" measures the space the label actually has, rather than guessing
+   * from the window, so it stays right when the panel is resized.
+   */
+  let stageBodyEl: HTMLDivElement | undefined = $state(undefined);
+
+  const zoomBy = (factor: number) => {
+    if (!fabricCanvas) return;
+    fabricCanvas.virtualZoom(fabricCanvas.getVirtualZoom() * factor);
+  };
+
+  const resetZoom = () => {
+    fabricCanvas?.resetVirtualZoom();
+  };
+
+  /**
+   * Scale the label so it fills the space it has.
+   *
+   * A D11 label is 96 px across, which is a postage stamp on a modern screen:
+   * far too small to place a 6 pt batch number by hand. The magnification is
+   * for editing only. The printer works from the canvas pixels, not from the
+   * size of the element on screen, so the printed result is unaffected.
+   */
+  const fitLabelToStage = () => {
+    if (!fabricCanvas || !stageBodyEl) return;
+    const rect = stageBodyEl.getBoundingClientRect();
+    const padding = 48;
+    const availW = stageBodyEl.clientWidth - padding;
+    const availH = window.innerHeight - rect.top - 170;
+    if (availW <= 0 || availH <= 0) return;
+    const ratio = Math.min(
+      availW / fabricCanvas.getWidth(),
+      availH / fabricCanvas.getHeight(),
+    );
+    fabricCanvas.virtualZoom(Math.min(4, Math.max(0.25, ratio)));
+  };
 </script>
 
 <svelte:window bind:innerWidth={windowWidth} onkeydown={onKeyDown} onpaste={onPaste} />
 
 <div class="image-editor">
   <div class="row mb-3">
-    <div class="col d-flex justify-content-center">
-      <div class="canvas-wrapper print-start-{labelProps.printDirection}">
-        <canvas bind:this={htmlCanvas}></canvas>
-      </div>
-    </div>
-  </div>
-
-  <div class="row mb-1">
-    <div class="col d-flex justify-content-center">
-      <div class="toolbar d-flex flex-wrap gap-1 justify-content-center align-items-center">
-        <button class="btn btn-sm btn-secondary" onclick={() => (currentDialog = "label_props")}>
-          <MdIcon icon="settings" />
-        </button>
-
-        <button class="btn btn-sm btn-secondary" onclick={clearCanvas} title={$tr("editor.clear")}>
-          <MdIcon icon="cancel_presentation" />
-        </button>
-
-        <!--
-          These two are how a template reaches the central server, and how one
-          comes back. They were bare icons, which is why the central store was
-          invisible: there was nothing on screen that said "templates live on
-          the server". Now they are labelled.
-        -->
-        <button
-          class="btn btn-sm btn-secondary"
-          title={$tr("params.saved_labels.menu_title")}
-          onclick={() => (currentDialog = "saved_labels")}>
-          <MdIcon icon="sd_storage" />
-          {$tr("editor.save_load")}
-        </button>
-
-        <button
-          class="btn btn-sm btn-secondary"
-          title={$tr("templates.gallery")}
-          onclick={() => (currentDialog = "quick_print")}>
-          <MdIcon icon="bolt" />
-          {$tr("templates.gallery")}
-        </button>
-
-        <button
-          class="btn btn-sm btn-secondary"
-          disabled={undoState.undoDisabled}
-          onclick={() => undo.undo()}
-          title={$tr("editor.undo")}>
-          <MdIcon icon="undo" />
-        </button>
-
-        <button
-          class="btn btn-sm btn-secondary"
-          disabled={undoState.redoDisabled}
-          onclick={() => undo.redo()}
-          title={$tr("editor.redo")}>
-          <MdIcon icon="redo" />
-        </button>
-
-        <button
-          class="btn btn-sm {$appConfig.gridEnabled ? 'btn-primary' : 'btn-secondary'}"
-          onclick={toggleGrid}
-          title={$tr("editor.grid")}>
-          <MdIcon icon="grid_on" />
-        </button>
-
-        <button class="btn btn-sm btn-secondary" onclick={() => fabricCanvas?.resetVirtualZoom()} title="Reset zoom">
-          {zoomText}
-        </button>
-
-        <button
-          class="btn btn-sm btn-{csvEnabled ? 'warning' : 'secondary'}"
-          title={$tr("params.csv.title")}
-          onclick={() => (currentDialog = "csv_props")}>
-          <MdIcon icon="dataset" />
-        </button>
-
-        <div class="btn-group btn-group-sm" role="group" title={$tr("templates.model")}>
-          <button
-            class="btn btn-outline-secondary"
-            class:active={templateModel === "d11"}
-            onclick={() => onModelChanged("d11")}>
-            D11
-          </button>
-          <button
-            class="btn btn-outline-secondary"
-            class:active={templateModel === "b21"}
-            onclick={() => onModelChanged("b21")}>
-            B21
-          </button>
+    <div class="col">
+      <!--
+        The toolbar used to sit BELOW the canvas, in one flat row of thirteen
+        buttons, with two of them styled as primary. It is now above the
+        canvas, grouped into named clusters, with a single primary action.
+      -->
+      <div class="designer-toolbar">
+        <div class="tool-group">
+          <span class="tool-group__label">{$tr("editor.group.label")}</span>
+          <div class="tool-group__buttons">
+            <button
+              class="btn btn-sm btn-secondary"
+              onclick={() => (currentDialog = "label_props")}
+              title={$tr("editor.group.label")}>
+              <MdIcon icon="settings" />
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick={clearCanvas} title={$tr("editor.clear")}>
+              <MdIcon icon="cancel_presentation" />
+            </button>
+          </div>
         </div>
 
-        <button
-          class="btn btn-sm btn-primary"
-          title={$tr("batch.title")}
-          onclick={() => {
-            refreshDeclaredVariables();
-            currentDialog = "csv_batch";
-          }}>
-          <MdIcon icon="print" />
-          {$tr("batch.title")}
-        </button>
+        <div class="tool-group">
+          <span class="tool-group__label">{$tr("editor.group.model")}</span>
+          <div class="tool-group__buttons">
+            <div class="btn-group btn-group-sm" role="group" title={$tr("templates.model")}>
+              <button
+                class="btn btn-outline-secondary"
+                class:active={templateModel === "d11"}
+                onclick={() => onModelChanged("d11")}>
+                D11
+              </button>
+              <button
+                class="btn btn-outline-secondary"
+                class:active={templateModel === "b21"}
+                onclick={() => onModelChanged("b21")}>
+                B21
+              </button>
+            </div>
+          </div>
+        </div>
 
-        <button
-          class="btn btn-sm btn-secondary"
-          title={$tr("editor.iconpicker.title")}
-          onclick={() => (currentDialog = "icon_picker")}>
-          <MdIcon icon="emoji_emotions" />
-          <MdIcon icon="add" />
-        </button>
+        <div class="tool-group">
+          <span class="tool-group__label">{$tr("editor.group.edit")}</span>
+          <div class="tool-group__buttons">
+            <button
+              class="btn btn-sm btn-secondary"
+              disabled={undoState.undoDisabled}
+              onclick={() => undo.undo()}
+              title={$tr("editor.undo")}>
+              <MdIcon icon="undo" />
+            </button>
+            <button
+              class="btn btn-sm btn-secondary"
+              disabled={undoState.redoDisabled}
+              onclick={() => undo.redo()}
+              title={$tr("editor.redo")}>
+              <MdIcon icon="redo" />
+            </button>
+            <button
+              class="btn btn-sm {$appConfig.gridEnabled ? 'btn-primary' : 'btn-secondary'}"
+              onclick={toggleGrid}
+              title={$tr("editor.grid")}>
+              <MdIcon icon="grid_on" />
+            </button>
+          </div>
+        </div>
 
-        <button
-          class="btn btn-sm btn-secondary"
-          title={$tr("editor.objectpicker.title")}
-          onclick={() => (currentDialog = "object_picker")}>
-          <MdIcon icon="format_shapes" />
-          <MdIcon icon="add" />
-        </button>
+        <div class="tool-group">
+          <span class="tool-group__label">{$tr("editor.group.add")}</span>
+          <div class="tool-group__buttons">
+            <button
+              class="btn btn-sm btn-secondary"
+              title={$tr("editor.objectpicker.title")}
+              onclick={() => (currentDialog = "object_picker")}>
+              <MdIcon icon="format_shapes" />
+              <MdIcon icon="add" />
+            </button>
+            <button
+              class="btn btn-sm btn-secondary"
+              title={$tr("editor.iconpicker.title")}
+              onclick={() => (currentDialog = "icon_picker")}>
+              <MdIcon icon="emoji_emotions" />
+              <MdIcon icon="add" />
+            </button>
+          </div>
+        </div>
 
-        <button class="btn btn-sm btn-primary ms-1" onclick={openPreview}>
-          <MdIcon icon="visibility" />
-          {$tr("editor.preview")}
-        </button>
-        <button
-          title="Print with default or saved parameters"
-          class="btn btn-sm btn-primary ms-1"
-          onclick={openPreviewAndPrint}
-          disabled={$connectionState !== "connected"}><MdIcon icon="print" /> {$tr("editor.print")}</button>
+        <div class="tool-group">
+          <span class="tool-group__label">{$tr("editor.group.templates")}</span>
+          <div class="tool-group__buttons">
+            <!--
+              These two are how a template reaches the central server, and how
+              one comes back. They were bare icons, which is why the central
+              store was invisible: there was nothing on screen that said
+              "templates live on the server". Now they are labelled.
+            -->
+            <button
+              class="btn btn-sm btn-secondary"
+              title={$tr("params.saved_labels.menu_title")}
+              onclick={() => (currentDialog = "saved_labels")}>
+              <MdIcon icon="sd_storage" />
+              {$tr("editor.save_load")}
+            </button>
+            <button
+              class="btn btn-sm btn-secondary"
+              title={$tr("templates.gallery")}
+              onclick={() => (currentDialog = "quick_print")}>
+              <MdIcon icon="bolt" />
+              {$tr("templates.gallery")}
+            </button>
+          </div>
+        </div>
+
+        <div class="tool-group">
+          <span class="tool-group__label">{$tr("editor.group.data")}</span>
+          <div class="tool-group__buttons">
+            <button
+              class="btn btn-sm btn-{csvEnabled ? 'warning' : 'secondary'}"
+              title={$tr("params.csv.title")}
+              onclick={() => (currentDialog = "csv_props")}>
+              <MdIcon icon="dataset" />
+            </button>
+            <button
+              class="btn btn-sm btn-secondary"
+              title={$tr("batch.title")}
+              onclick={() => {
+                refreshDeclaredVariables();
+                currentDialog = "csv_batch";
+              }}>
+              <MdIcon icon="table_view" />
+              {$tr("batch.title")}
+            </button>
+          </div>
+        </div>
+
+        <div class="tool-group tool-group--end">
+          <span class="tool-group__label">{$tr("editor.group.output")}</span>
+          <div class="tool-group__buttons">
+            <button class="btn btn-sm btn-secondary" onclick={openPreview}>
+              <MdIcon icon="visibility" />
+              {$tr("editor.preview")}
+            </button>
+            <button
+              title="Print with default or saved parameters"
+              class="btn btn-sm btn-primary"
+              onclick={openPreviewAndPrint}
+              disabled={$connectionState !== "connected"}>
+              <MdIcon icon="print" />
+              {$tr("editor.print")}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="row mb-1">
-    <div class="col d-flex justify-content-center">
-      <div class="toolbar d-flex flex-wrap gap-1 justify-content-center align-items-center">
-        {#if selectedCount > 0}
-          <button class="btn btn-sm btn-danger me-1" onclick={deleteSelected} title={$tr("editor.delete")}>
-            <MdIcon icon="delete" />
-          </button>
-        {/if}
+    <div class="col">
+      <div class="stage">
+        <div class="stage__head">
+          <span class="stage__chip">
+            <span class="stage__chip-dim">{labelProps.size.width} &times; {labelProps.size.height} px</span>
+            <span class="stage__chip-model">{templateModel.toUpperCase()}</span>
+          </span>
 
-        {#if selectedCount > 0}
-          <button class="btn btn-sm btn-secondary me-1" onclick={cloneSelected} title={$tr("editor.clone")}>
-            <MdIcon icon="content_copy" />
-          </button>
-        {/if}
+          <!--
+            The zoom control lives on the stage, where the thing it changes
+            is, rather than back in the toolbar with everything else.
+          -->
+          <div class="stage__zoom">
+            <button
+              class="btn btn-sm btn-secondary"
+              onclick={() => zoomBy(1 / 1.25)}
+              title={$tr("editor.zoom_out")}>
+              <MdIcon icon="zoom_out" />
+            </button>
+            <button
+              class="btn btn-sm btn-secondary stage__zoom-value"
+              onclick={resetZoom}
+              title={$tr("editor.zoom_reset")}>
+              {zoomText}
+            </button>
+            <button
+              class="btn btn-sm btn-secondary"
+              onclick={() => zoomBy(1.25)}
+              title={$tr("editor.zoom_in")}>
+              <MdIcon icon="zoom_in" />
+            </button>
+            <button
+              class="btn btn-sm btn-secondary"
+              onclick={fitLabelToStage}
+              title={$tr("editor.zoom_fit")}>
+              <MdIcon icon="fit_screen" />
+            </button>
+          </div>
+        </div>
+
+        <div class="stage__body" bind:this={stageBodyEl}>
+          <div class="stage__paper print-start-{labelProps.printDirection}">
+            <canvas bind:this={htmlCanvas}></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-1">
+    <div class="col">
+      <!--
+        The controls for the selected object were a loose, centred row of
+        widgets floating under the canvas, with the destructive action first
+        and no indication of what they belonged to. They are now a panel with
+        a heading, and the object's own actions live in that heading.
+      -->
+      <div class="props-panel">
+        <div class="props-panel__head">
+          <span class="props-panel__title">{$tr("editor.group.properties")}</span>
+          {#if selectedCount > 0}
+            <div class="props-panel__actions">
+              <button class="btn btn-sm btn-secondary" onclick={cloneSelected} title={$tr("editor.clone")}>
+                <MdIcon icon="content_copy" />
+              </button>
+              <button class="btn btn-sm btn-danger" onclick={deleteSelected} title={$tr("editor.delete")}>
+                <MdIcon icon="delete" />
+              </button>
+            </div>
+          {/if}
+        </div>
+        <div class="props-panel__body d-flex flex-wrap gap-3 align-items-end">
 
         {#if selectedObject && selectedCount === 1}
           <GenericObjectParamsControls {selectedObject} {editRevision} valueUpdated={controlValueUpdated} />
@@ -921,9 +1048,17 @@
             valueUpdated={controlValueUpdated} />
         {/if}
 
-        <SerialConfigControls
-          serialConfig={templateVariables.serial}
-          onChange={onSerialConfigChanged} />
+          <!--
+            The serial counter belongs to the template, not to the selected
+            object, so it is set apart from the object's own controls rather
+            than sitting in the middle of them.
+          -->
+          <div class="props-panel__aside">
+            <SerialConfigControls
+              serialConfig={templateVariables.serial}
+              onChange={onSerialConfigChanged} />
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -979,24 +1114,171 @@
 </div>
 
 <style>
-  .canvas-wrapper {
+  /* --- the designer toolbar ----------------------------------------------------- */
+
+  .designer-toolbar {
+    align-items: flex-start;
+    background: var(--lb-surface);
     border: 1px solid var(--lb-border);
-    background-color: var(--lb-surface-sunken);
-    border-radius: var(--lb-radius);
+    border-radius: var(--lb-radius-lg);
+    box-shadow: var(--lb-shadow-sm);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--lb-space-4);
+    padding: var(--lb-space-3) var(--lb-space-4);
+  }
+
+  .tool-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--lb-space-2);
+    min-width: 0;
+  }
+
+  /* The output cluster sits at the right edge, so the one button that matters
+     is where the eye lands last. */
+  .tool-group--end {
+    margin-left: auto;
+  }
+
+  .tool-group__label {
+    color: var(--lb-text-faint);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    padding-left: 2px;
+    text-transform: uppercase;
+  }
+
+  .tool-group__buttons {
+    align-items: center;
+    display: flex;
+    gap: var(--lb-space-1);
+  }
+
+  /* --- the properties panel ------------------------------------------------------ */
+
+  .props-panel {
+    background: var(--lb-surface);
+    border: 1px solid var(--lb-border);
+    border-radius: var(--lb-radius-lg);
+    box-shadow: var(--lb-shadow-sm);
+    overflow: hidden;
+  }
+
+  .props-panel__head {
+    align-items: center;
+    border-bottom: 1px solid var(--lb-border);
+    display: flex;
+    justify-content: space-between;
+    padding: var(--lb-space-2) var(--lb-space-4);
+  }
+
+  .props-panel__title {
+    color: var(--lb-text-faint);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .props-panel__actions {
+    display: flex;
+    gap: var(--lb-space-1);
+  }
+
+  .props-panel__body {
+    padding: var(--lb-space-4);
+  }
+
+  .props-panel__aside {
+    border-left: 1px solid var(--lb-border);
+    margin-left: auto;
+    padding-left: var(--lb-space-4);
+  }
+
+  /* --- the stage ---------------------------------------------------------------- */
+
+  .stage {
+    background: var(--lb-surface);
+    border: 1px solid var(--lb-border);
+    border-radius: var(--lb-radius-lg);
     box-shadow: var(--lb-shadow);
-    max-width: 100%;
-    max-height: 70vh;
+    overflow: hidden;
+  }
+
+  .stage__head {
+    align-items: center;
+    border-bottom: 1px solid var(--lb-border);
+    display: flex;
+    justify-content: space-between;
+    padding: var(--lb-space-2) var(--lb-space-3);
+  }
+
+  .stage__chip {
+    align-items: center;
+    color: var(--lb-text-muted);
+    display: inline-flex;
+    font-size: var(--lb-text-sm);
+    gap: var(--lb-space-2);
+  }
+
+  .stage__chip-dim {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stage__chip-model {
+    background: var(--lb-accent-soft);
+    border-radius: var(--lb-radius-sm);
+    color: var(--lb-accent);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 2px 6px;
+  }
+
+  .stage__zoom {
+    align-items: center;
+    display: flex;
+    gap: var(--lb-space-1);
+  }
+
+  .stage__zoom-value {
+    font-variant-numeric: tabular-nums;
+    min-width: 4.25rem;
+  }
+
+  /* The label sits on a workbench: a dotted, sunken surface, with the label
+     itself on a sheet of paper that casts a shadow. */
+  .stage__body {
+    align-items: flex-start;
+    background-color: var(--lb-surface-sunken);
+    background-image: radial-gradient(var(--lb-border) 1px, transparent 1px);
+    background-size: 16px 16px;
+    display: flex;
+    justify-content: center;
+    max-height: 64vh;
+    min-height: 240px;
     overflow: auto;
-    padding: var(--lb-space-3);
+    padding: var(--lb-space-5);
   }
-  .canvas-wrapper.print-start-left {
-    border-left: 2px solid #ff4646;
+
+  .stage__paper {
+    background: #ffffff;
+    border-radius: 2px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 18px 44px rgba(0, 0, 0, 0.35);
+    flex: 0 0 auto;
+    line-height: 0;
   }
-  .canvas-wrapper.print-start-top {
-    border-top: 2px solid #ff4646;
+
+  .stage__paper.print-start-left {
+    border-left: 3px solid #ff4646;
   }
-  .canvas-wrapper canvas {
-    image-rendering: pixelated;
+  .stage__paper.print-start-top {
+    border-top: 3px solid #ff4646;
+  }
+  .stage__paper canvas {
     display: block;
+    image-rendering: pixelated;
   }
 </style>

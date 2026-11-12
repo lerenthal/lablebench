@@ -340,5 +340,17 @@
   "main.tagline": "Label design for NIIMBOT printers",
   "main.standalone": "Desktop app",
   "main.language": "Language",
-  "main.debug": "Debug"
+  "main.debug": "Debug",
+  "editor.group.label": "Label",
+  "editor.group.model": "Model",
+  "editor.group.edit": "Edit",
+  "editor.group.add": "Add",
+  "editor.group.templates": "Templates",
+  "editor.group.data": "Data",
+  "editor.group.output": "Output",
+  "editor.zoom_in": "Zoom in",
+  "editor.zoom_out": "Zoom out",
+  "editor.zoom_fit": "Fit to window",
+  "editor.zoom_reset": "Reset zoom to 100%",
+  "editor.group.properties": "Properties"
 }
