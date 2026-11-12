@@ -28,3 +28,7 @@ dist/
 .idea/
 .vscode/
 *.swp
+
+# Backups taken by scripts/backup.sh. They are copies of the database and
+# the assets, not source.
+backups/
