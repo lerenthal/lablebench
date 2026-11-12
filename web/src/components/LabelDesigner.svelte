@@ -13,6 +13,8 @@
     type LabelProps,
     type MoveDirection,
     type OjectType,
+    type TemplateModel,
+    type TemplateVariables,
   } from "$/types";
   import { FileUtils } from "$/utils/file_utils";
   import { tr } from "$/utils/i18n";
@@ -39,11 +41,33 @@
   import VectorParamsControls from "$/components/designer-controls/VectorParamsControls.svelte";
   import { CanvasUtils } from "$/utils/canvas_utils";
   import { appConfirm } from "$/stores/confirm";
+  import { templateStore } from "$/services/template_store";
+  import { DefaultTemplate } from "$/services/default_template";
+  import { extractVariablesFromJson } from "$/utils/canvas_preprocess";
+  import CsvBatchControl from "$/components/dialogs/CsvBatchControl.svelte";
 
-  type DialogName = "none" | "preview" | "label_props" | "saved_labels" | "csv_props" | "icon_picker" | "object_picker";
+  type DialogName =
+    | "none"
+    | "preview"
+    | "label_props"
+    | "saved_labels"
+    | "csv_props"
+    | "csv_batch"
+    | "icon_picker"
+    | "object_picker";
 
   let htmlCanvas: HTMLCanvasElement;
   let currentDialog = $state<DialogName>("none");
+
+  // --- LabelBench template state -------------------------------------------------
+  /** Server id of the template currently open, or undefined for a new one. */
+  let templateId = $state<string | undefined>(undefined);
+  /** Target printer model for this template. */
+  let templateModel = $state<TemplateModel>("d11");
+  /** Declared merge variables and their persisted CSV column bindings. */
+  let templateVariables = $state<TemplateVariables>({ variables: [], csv_mapping: {} });
+  /** Tags for light organisation. */
+  let templateTags = $state<string[]>([]);
 
   let fabricCanvas = $state<CustomCanvas>();
   let labelProps = $state<LabelProps>(DEFAULT_LABEL_PROPS);
@@ -179,14 +203,55 @@
   };
 
   const exportCurrentLabel = (): ExportedLabelTemplate => {
-    return FileUtils.makeExportedLabel(fabricCanvas!, labelProps, csvEnabled);
+    const label = FileUtils.makeExportedLabel(fabricCanvas!, labelProps, csvEnabled);
+
+    // Carry the LabelBench fields: the target printer model, the declared
+    // variables and their CSV bindings, and the tags.
+    label.model = templateModel;
+    label.variables = templateVariables;
+    label.tags = templateTags;
+    label.id = templateId;
+
+    return label;
   };
 
   const onLoadRequested = (label: ExportedLabelTemplate) => {
+    templateId = label.id;
+    templateModel = label.model ?? "d11";
+    templateVariables = label.variables ?? { variables: [], csv_mapping: {} };
+    templateTags = label.tags ?? [];
+
     loadLabelData(label).then(() => {
       undo.push(fabricCanvas!, labelProps);
       hasUnsavedChanges = false;
     });
+  };
+
+  /**
+   * The variables a template declares are derived from the `{placeholder}`
+   * tokens in its objects, plus anything already recorded.
+   */
+  const refreshDeclaredVariables = () => {
+    const found = extractVariablesFromJson(getCanvasForPreview() as { objects?: Array<{ text?: string }> });
+    const known = new Map(templateVariables.variables.map((v) => [v.name, v]));
+
+    for (const name of found) {
+      if (!known.has(name)) {
+        known.set(name, { name, type: "text", required: false });
+      }
+    }
+
+    templateVariables = { ...templateVariables, variables: [...known.values()] };
+  };
+
+  const onTemplateVariablesChanged = (variables: TemplateVariables) => {
+    templateVariables = variables;
+    hasUnsavedChanges = true;
+  };
+
+  const onModelChanged = (model: TemplateModel) => {
+    templateModel = model;
+    hasUnsavedChanges = true;
   };
 
   const onSave = () => {
@@ -338,15 +403,20 @@
       return;
     }
 
-    try {
-      const defaultTemplate = LocalStoragePersistence.loadDefaultTemplate();
+    // The default template lives on the central server; only its id is kept
+    // in the browser. Nothing is copied between machines.
+    const defaultId = DefaultTemplate.id();
 
-      if (defaultTemplate !== null) {
+    if (defaultId !== undefined) {
+      try {
+        const defaultTemplate = await templateStore.load(defaultId);
         onLoadRequested(defaultTemplate);
         return;
+      } catch (e) {
+        console.warn("Could not load the default template", e);
+        // It may have been deleted on another workstation.
+        DefaultTemplate.set(undefined);
       }
-    } catch (e) {
-      Toasts.error(e);
     }
 
     LabelDesignerObjectHelper.addText(fabricCanvas!, $tr("editor.default_text"));
@@ -590,6 +660,32 @@
           <MdIcon icon="dataset" />
         </button>
 
+        <div class="btn-group btn-group-sm" role="group" title={$tr("templates.model")}>
+          <button
+            class="btn btn-outline-secondary"
+            class:active={templateModel === "d11"}
+            onclick={() => onModelChanged("d11")}>
+            D11
+          </button>
+          <button
+            class="btn btn-outline-secondary"
+            class:active={templateModel === "b21"}
+            onclick={() => onModelChanged("b21")}>
+            B21
+          </button>
+        </div>
+
+        <button
+          class="btn btn-sm btn-primary"
+          title={$tr("batch.title")}
+          onclick={() => {
+            refreshDeclaredVariables();
+            currentDialog = "csv_batch";
+          }}>
+          <MdIcon icon="print" />
+          {$tr("batch.title")}
+        </button>
+
         <button
           class="btn btn-sm btn-secondary"
           title={$tr("editor.iconpicker.title")}
@@ -689,6 +785,13 @@
       onClose={() => (currentDialog = "none")}
       bind:enabled={csvEnabled}
       onPlaceholderPicked={onCsvPlaceholderPicked} />
+  {:else if currentDialog === "csv_batch"}
+    <CsvBatchControl
+      onClose={() => (currentDialog = "none")}
+      template={exportCurrentLabel()}
+      fabricJson={getCanvasForPreview()}
+      {labelProps}
+      onBindingChanged={onTemplateVariablesChanged} />
   {:else if currentDialog === "icon_picker"}
     <IconPicker onSubmit={onIconPicked} onSubmitSvg={onSvgIconPicked} onClose={() => (currentDialog = "none")} />
   {:else if currentDialog === "object_picker"}

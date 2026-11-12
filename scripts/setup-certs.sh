@@ -70,7 +70,14 @@ echo "==> Root CA            : $CAROOT/rootCA.pem"
 echo
 echo "Next steps:"
 echo "  1. Trust the root CA on THIS machine (so the server and your browser agree):"
-echo "       sudo $MKCERT -install"
+echo "       sudo cp $CAROOT/rootCA.pem /usr/local/share/ca-certificates/labelbench-rootCA.crt"
+echo "       sudo update-ca-certificates"
+echo
+echo "     Do NOT use 'sudo mkcert -install' for this. Under sudo, HOME becomes"
+echo "     /root, so mkcert creates a SECOND, different CA and installs that one"
+echo "     instead — the workstation would then trust a CA that did not sign the"
+echo "     server certificate. Copying rootCA.pem directly avoids that entirely."
+echo
 echo "  2. Copy the root CA to every workstation that will open the app:"
 echo "       scp $CAROOT/rootCA.pem <workstation>:~"
 echo "     then import it there (see README, 'Trusting the CA on a workstation')."

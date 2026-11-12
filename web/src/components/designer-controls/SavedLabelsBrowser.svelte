@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ExportedLabelTemplate, LabelProps } from "$/types";
+  import type { LabelProps, TemplateListItem } from "$/types";
   import { tr } from "$/utils/i18n";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { browserInfo } from "$/utils/browser.svelte";
@@ -9,7 +9,7 @@
     onItemClicked: (index: number) => void;
     onItemDelete: (index: number) => void;
     onItemExport: (index: number) => void;
-    labels: ExportedLabelTemplate[];
+    labels: TemplateListItem[];
     selectedIndex?: number;
     class?: string;
   }

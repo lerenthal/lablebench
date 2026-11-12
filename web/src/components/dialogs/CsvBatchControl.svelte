@@ -86,7 +86,6 @@
   let page = $state<number>(0);
   let pageSize = 10;
   let selectedRow = $state<number>(-1);
-  let previewElement = $state<HTMLCanvasElement | undefined>(undefined);
   let previewImage = $state<string>("");
 
   let rowStates = $state<BatchRowState[]>([]);
@@ -220,17 +219,10 @@
       { ...DEFAULT_RENDER_PARAMS, postProcess: dithering },
     );
 
-    // The rendered canvas is detached, so hand it to the visible canvas as an image.
+    // The rendered canvas is detached and its size is not known until it is
+    // rendered, so hand the result over as an image. That also guarantees the
+    // preview shows exactly the raster the printer will receive.
     previewImage = canvas.toDataURL("image/png");
-
-    if (previewElement !== undefined) {
-      const ctx = previewElement.getContext("2d");
-      if (ctx !== null) {
-        previewElement.width = canvas.width;
-        previewElement.height = canvas.height;
-        ctx.drawImage(canvas, 0, 0);
-      }
-    }
   };
 
   const onPrint = async (onlySelected: boolean) => {
@@ -570,7 +562,7 @@
 
       {#if previewImage !== ""}
         <div class="text-center mb-2">
-          <canvas bind:this={previewElement} class="batch-preview"></canvas>
+          <img class="batch-preview" src={previewImage} alt="label preview" />
         </div>
       {/if}
 

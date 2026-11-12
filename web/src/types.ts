@@ -263,11 +263,31 @@ export interface TemplateSummary {
   label_w_mm: number;
   label_h_mm: number;
   orientation: "left" | "top";
+  /** Label geometry, so a gallery can render the card without the canvas document. */
+  label: LabelProps;
   tags: string[];
   thumbnail?: string;
   variable_names: string[];
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * A row in the saved-templates browser.
+ *
+ * The browser only needs the identity, the title, the thumbnail and the label
+ * geometry — not the whole canvas document. Keeping the list payload separate
+ * from the canvas keeps the gallery fast.
+ */
+export interface TemplateListItem {
+  id: string;
+  title: string;
+  timestamp: number;
+  thumbnailBase64?: string;
+  label: LabelProps;
+  model: TemplateModel;
+  tags: string[];
+  variable_names: string[];
 }
 
 export const previewPropsKeys = Object.keys(PreviewPropsSchema.shape) as (keyof PreviewProps)[];

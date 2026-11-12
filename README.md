@@ -165,6 +165,13 @@ sudo cp ~/rootCA.pem /usr/local/share/ca-certificates/labelbench-rootCA.crt
 sudo update-ca-certificates
 ```
 
+> **Do not use `sudo mkcert -install` for this.** Under `sudo`, `HOME` becomes
+> `/root`, so mkcert looks in a different CAROOT, finds no CA, **creates a second
+> one** and installs that instead. The workstation would then trust a CA that
+> never signed the server certificate, and the browser would still show a
+> certificate warning. Copying `rootCA.pem` directly avoids the problem
+> entirely. `scripts/setup-certs.sh` prints the correct commands.
+
 **Windows** (PowerShell, administrator)
 
 ```powershell
@@ -233,7 +240,8 @@ document, the declared variables and references to any uploaded images or fonts.
 
 ## Running a CSV batch
 
-1. Open the **CSV batch** dialog.
+1. Click **CSV batch printing** in the designer toolbar (next to the printer
+   model selector).
 2. **Import CSV** (or paste the data). The columns are detected, with delimiter
    sniffing and quoted-field handling.
 3. **Auto-match columns** binds each CSV column to the template variable of the

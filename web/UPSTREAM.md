@@ -35,6 +35,7 @@ behaviour had to change, and each such edit is listed below.
 | `src/services/api.ts` | Typed client for the LabelBench REST API. One error shape. |
 | `src/services/template_store.ts` | Translation layer between niimblue's in-memory `ExportedLabelTemplate` and the server's column model. |
 | `src/services/asset_store.ts` | Moves image bitmaps out of the template document and into the server asset store (`asset:<id>` markers). |
+| `src/services/default_template.ts` | The default-template **pointer**. Only the id is kept in the browser; the template is fetched from the server. |
 | `src/utils/label_render.ts` | The shared render pipeline (merge → mirror → render → 1-bit post-process), extracted so the manual preview and the CSV batch runner render identically. |
 | `src/utils/csv_batch.ts` | PapaParse import, column detection, auto-binding, serial auto-increment, variable resolution. |
 | `src/utils/batch_printer.ts` | Batch runner: per-row failure isolation, pause, cancel, copies per row, print-head width enforcement. |
@@ -47,6 +48,9 @@ behaviour had to change, and each such edit is listed below.
 | `src/types.ts` | Added the LabelBench template fields (`model`, `dpmm`, `variables`, `tags`, `assetIds`) and the server-side document types. All optional, so the undo buffer and legacy-import paths stay valid. |
 | `src/utils/canvas_preprocess.ts` | Added `extractVariables` / `extractVariablesFromJson` — the merge variables a template declares. |
 | `src/utils/file_utils.ts` | Builds templates with the new fields. |
+| `src/components/dialogs/SavedLabelsMenu.svelte` | **Rewritten** against the server store. The seam swap required async call sites; the template list, save, replace, delete, load, import and export all go through `templateStore` now. |
+| `src/components/designer-controls/SavedLabelsBrowser.svelte` | The list payload changed from `ExportedLabelTemplate[]` to `TemplateListItem[]` — the browser only needs identity, title, thumbnail and label geometry, not the canvas document. |
+| `src/components/LabelDesigner.svelte` | Template state (model, variables, tags, id), the model selector, the CSV batch entry point, and the default template loaded from the server. |
 | `src/locale/dicts/en.json` | New UI strings. Other locales fall back to English. |
 | `package.json` | Added `papaparse` + `@types/papaparse`. |
 

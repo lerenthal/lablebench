@@ -144,7 +144,9 @@ export interface TemplateSummary {
   model: TemplateModel;
   label_w_mm: number;
   label_h_mm: number;
-  orientation: Orientation;
+  orientation: "left" | "top";
+  /** Label geometry, so a gallery can render the card without the canvas document. */
+  label: LabelProps;
   tags: string[];
   thumbnail?: string;
   variable_names: string[];

@@ -14,6 +14,7 @@ import { api, type TemplatePayload } from "$/services/api";
 import type {
   ExportedLabelTemplate,
   ServerTemplate,
+  TemplateListItem,
   TemplateSummary,
 } from "$/types";
 
@@ -73,10 +74,34 @@ export function fromServerTemplate(template: ServerTemplate): ExportedLabelTempl
   };
 }
 
+/**
+ * Convert a server summary into a row for the saved-templates browser.
+ *
+ * The browser needs the identity, the title, the thumbnail and the label
+ * geometry — not the whole canvas document.
+ */
+export function toListItem(summary: TemplateSummary): TemplateListItem {
+  return {
+    id: summary.id,
+    title: summary.name,
+    timestamp: Date.parse(summary.updated_at) || 0,
+    thumbnailBase64: summary.thumbnail,
+    label: summary.label,
+    model: summary.model,
+    tags: summary.tags,
+    variable_names: summary.variable_names,
+  };
+}
+
 export class TemplateStore {
   /** Compact list for the gallery and the saved-labels browser. */
   async list(): Promise<TemplateSummary[]> {
     return api.listTemplates();
+  }
+
+  /** The same list, shaped for the saved-templates browser. */
+  async listItems(): Promise<TemplateListItem[]> {
+    return (await api.listTemplates()).map(toListItem);
   }
 
   /** Load one template with its full canvas document. */

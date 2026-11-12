@@ -291,6 +291,7 @@ export class TemplateService {
       label_w_mm: row.label_w_mm,
       label_h_mm: row.label_h_mm,
       orientation: row.orientation as TemplateSummary["orientation"],
+      label: canvas.label,
       tags: safeParseArray(row.tags),
       thumbnail: canvas.thumbnail,
       variable_names: variables.variables.map((v) => v.name),

@@ -86,6 +86,11 @@ describe("templates CRUD", () => {
     assert.equal(list.length, 1);
     assert.deepEqual(list[0]!.variable_names, ["lot"]);
     assert.deepEqual(list[0]!.tags, ["lab"]);
+    // The gallery needs the label geometry to render the card.
+    assert.deepEqual(list[0]!.label, {
+      printDirection: "left",
+      size: { width: 96, height: 160 },
+    });
     // The heavy canvas document must not be in the list payload.
     assert.equal(list[0]!.canvas, undefined);
   });
