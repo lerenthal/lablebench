@@ -411,6 +411,9 @@ there is nothing to copy and nothing to install.
 
 ## Designing a template
 
+The editor opens with the toolbar above the canvas, grouped into named
+clusters: Label, Model, Edit, Add, Templates, Data and Output.
+
 1. Open the app and set the **label size** in millimetres (mm → px at 8 px/mm,
    i.e. 203 dpi) and the **target printer model**.
 2. Drag objects onto the canvas: text, barcode, QR, image, rectangle, line.
@@ -419,8 +422,18 @@ there is nothing to copy and nothing to install.
    from these placeholders.
 4. For a date or time, use the date/time insert — `{dt}`, `{dt|YYYY-MM-DD}`,
    `{dt|HH:mm}`, and relative forms like `{dt-1d}`.
-5. Check **Print preview** — it shows the real 1-bit rendering.
-6. **Save** puts the template on the central server. Every workstation sees it
+5. **Zoom the canvas** with the control on the stage: out, in, and *fit*,
+   which scales the label to fill the space it has. A D11 label is 96 px
+   across, which is too small to place a 6 pt batch number by hand; the
+   magnification is for editing only and does not change what is printed.
+6. Run the **preflight check** before printing. It reports everything that
+   would make the printed label wrong — text that overflows its box, text too
+   small to read, text with too little contrast against its background, an
+   object that runs off the label and will be clipped, text covered by
+   another object, an empty text object, and a variable that was never filled
+   in. Click a finding to select the offending object.
+7. Check **Print preview** — it shows the real 1-bit rendering.
+8. **Save** puts the template on the central server. Every workstation sees it
    immediately; there is nothing to copy.
 
 The template stores its name, target model, label size, orientation, the canvas
@@ -430,8 +443,7 @@ document, the declared variables and references to any uploaded images or fonts.
 
 ## Running a CSV batch
 
-1. Click **CSV batch printing** in the designer toolbar (next to the printer
-   model selector).
+1. Click **CSV batch printing** in the Data cluster of the designer toolbar.
 2. **Import CSV** (or paste the data). The columns are detected, with delimiter
    sniffing and quoted-field handling.
 3. **Auto-match columns** binds each CSV column to the template variable of the

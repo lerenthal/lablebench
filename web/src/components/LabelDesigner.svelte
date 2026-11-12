@@ -56,6 +56,9 @@
   import { DefaultTemplate } from "$/services/default_template";
   import { extractVariablesFromJson } from "$/utils/canvas_preprocess";
   import CsvBatchControl from "$/components/dialogs/CsvBatchControl.svelte";
+  import { runPreflight, type PreflightFinding } from "$/utils/preflight";
+  import PreflightPanel from "$/components/dialogs/PreflightPanel.svelte";
+  import AppModal from "$/components/basic/AppModal.svelte";
 
   type DialogName =
     | "none"
@@ -66,7 +69,8 @@
     | "csv_batch"
     | "quick_print"
     | "icon_picker"
-    | "object_picker";
+    | "object_picker"
+    | "preflight";
 
   let htmlCanvas: HTMLCanvasElement;
   let currentDialog = $state<DialogName>("none");
@@ -94,6 +98,8 @@
   let undoState = $state<UndoState>({ undoDisabled: false, redoDisabled: false });
   let zoomText = $state<string>("100%");
   let hasUnsavedChanges = $state<boolean>(false);
+  /** What the last preflight check found. */
+  let preflightFindings = $state<PreflightFinding[]>([]);
 
   const undo = new UndoRedo();
 
@@ -761,6 +767,46 @@
    * for editing only. The printer works from the canvas pixels, not from the
    * size of the element on screen, so the printed result is unaffected.
    */
+  /**
+   * Check the label for everything that would make the printed result wrong.
+   *
+   * The checks are read-only and cheap, so this runs on demand rather than on
+   * every edit. The point is to catch a mistake before a batch of five
+   * hundred labels is printed, not to nag while the label is being designed.
+   */
+  const runPreflightCheck = () => {
+    if (!fabricCanvas) return;
+    preflightFindings = runPreflight(fabricCanvas, {
+      labelWidth: labelProps.size.width,
+      labelHeight: labelProps.size.height,
+    });
+    currentDialog = "preflight";
+  };
+
+  /**
+   * Select the object a finding refers to, so it can be fixed in place.
+   *
+   * A finding identifies its object by its position in the canvas object
+   * list, which is how the checker identifies it. The lookup falls back to
+   * matching fabric's own object identity, in case that ever changes.
+   */
+  const selectPreflightObject = (objectId: number) => {
+    const objects = fabricCanvas?.getObjects() ?? [];
+    const target =
+      objects[objectId] ??
+      objects.find(
+        (obj) =>
+          (obj as unknown as { canvasId?: number }).canvasId === objectId ||
+          (obj as unknown as { id?: unknown }).id === objectId,
+      );
+    if (!target || !fabricCanvas) return;
+    fabricCanvas.setActiveObject(target);
+    fabricCanvas.requestRenderAll();
+    selectedObject = target;
+    selectedCount = 1;
+    currentDialog = "none";
+  };
+
   const fitLabelToStage = () => {
     if (!fabricCanvas || !stageBodyEl) return;
     const rect = stageBodyEl.getBoundingClientRect();
@@ -911,7 +957,7 @@
                 currentDialog = "csv_batch";
               }}>
               <MdIcon icon="table_view" />
-              {$tr("batch.title")}
+              {$tr("editor.batch")}
             </button>
           </div>
         </div>
@@ -919,6 +965,13 @@
         <div class="tool-group tool-group--end">
           <span class="tool-group__label">{$tr("editor.group.output")}</span>
           <div class="tool-group__buttons">
+            <button
+              class="btn btn-sm btn-secondary"
+              onclick={runPreflightCheck}
+              title={$tr("preflight.title")}>
+              <MdIcon icon="fact_check" />
+              {$tr("editor.preflight")}
+            </button>
             <button class="btn btn-sm btn-secondary" onclick={openPreview}>
               <MdIcon icon="visibility" />
               {$tr("editor.preview")}
@@ -1103,6 +1156,13 @@
       onBatchTemplate={onQuickBatch} />
   {:else if currentDialog === "icon_picker"}
     <IconPicker onSubmit={onIconPicked} onSubmitSvg={onSvgIconPicked} onClose={() => (currentDialog = "none")} />
+  {:else if currentDialog === "preflight"}
+    <AppModal title={$tr("preflight.title")} onClose={() => (currentDialog = "none")}>
+      <PreflightPanel
+        findings={preflightFindings}
+        onselect={selectPreflightObject}
+        onclose={() => (currentDialog = "none")} />
+    </AppModal>
   {:else if currentDialog === "object_picker"}
     <ObjectPicker
       onSubmit={onObjectPicked}
@@ -1124,7 +1184,7 @@
     box-shadow: var(--lb-shadow-sm);
     display: flex;
     flex-wrap: wrap;
-    gap: var(--lb-space-4);
+    gap: var(--lb-space-3) var(--lb-space-3);
     padding: var(--lb-space-3) var(--lb-space-4);
   }
 
