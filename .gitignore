@@ -1,0 +1,30 @@
+# --- LabelBench ---
+
+# Runtime data: the SQLite file and the asset directory. This is the entire
+# backup, but it is not source.
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# TLS material. The certificate is regenerable from the mkcert CA; the private
+# key and the CA root must never enter the repository.
+deploy/caddy/certs/*.pem
+!deploy/caddy/certs/.gitkeep
+
+# Local configuration. .env.example is the tracked template.
+.env
+
+# Locally staged tooling binaries.
+tools/bin/
+
+# --- Node ---
+node_modules/
+dist/
+*.tsbuildinfo
+
+# --- Editor / OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp

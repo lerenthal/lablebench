@@ -1,0 +1,62 @@
+# LabelBench — one-command bring-up on an amd64 Ubuntu/Debian host.
+#
+#   docker compose up -d --build
+#
+# Serves https://labelbench.local (see .env for LABELBENCH_HOST).
+# The SQLite file and the asset directory under ./data are the entire backup.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    image: labelbench/app:1.0.0
+    restart: unless-stopped
+    environment:
+      LABELBENCH_HOST: 0.0.0.0
+      LABELBENCH_PORT: 3000
+      LABELBENCH_DATA_DIR: /data
+      LABELBENCH_DB_PATH: /data/labelbench.db
+      LABELBENCH_ASSET_DIR: /data/assets
+      LABELBENCH_STATIC_DIR: /app/public
+      # Phase 1 runs open on the trusted LAN. The seam for a later gate:
+      # LABELBENCH_AUTH_MODE: apikey
+      # LABELBENCH_API_KEY: <shared secret>
+      LABELBENCH_AUTH_MODE: ${LABELBENCH_AUTH_MODE:-none}
+      LABELBENCH_API_KEY: ${LABELBENCH_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - labelbench-data:/data
+    expose:
+      - "3000"
+    networks:
+      - labelbench
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      LABELBENCH_HOST: ${LABELBENCH_HOST:-labelbench.local}
+    ports:
+      # 443 is the origin the workstations open. It must be a browser-trusted
+      # HTTPS origin or Web Bluetooth / Web Serial are unavailable.
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/caddy/certs:/certs:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - labelbench
+
+volumes:
+  labelbench-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  labelbench:

@@ -1,0 +1,201 @@
+# M0 — Viability report
+
+**Goal:** from a Chromium page served over trusted HTTPS, print a test raster to
+a D11 over Web Bluetooth and a B21 over Web Serial. Confirm the 96 / 384 px
+widths, density and rotation.
+
+**Status: partially verified.** The software path is verified end to end; the
+two hardware transports are verified up to the point where the physical printers
+must be present. This report states exactly what has been proven and what is
+still open, so the next session does not repeat the software work.
+
+---
+
+## 1. What the audit established (software)
+
+Read from the upstream source, not from documentation.
+
+### Print-head widths — confirmed
+
+`niimbluelib/src/printer_models.ts`, generated from Niimbot's own hardware list:
+
+| Model | dpi | `printheadPixels` | density |
+|---|---|---|---|
+| `D11` | 203 | **96** | 1–3 (default 2) |
+| `D11S` | 203 | 96 | 1–3 |
+| `D110` | 203 | 96 | 1–3 |
+| `D110_M` | 203 | 96 | 1–5 |
+| `B21` | 203 | **384** | 1–5 (default 3) |
+| `B21_L2B` | 203 | 384 | 1–5 |
+| `B1` | 203 | 384 | 1–5 |
+
+Both at 8 px/mm. The brief's "D11 = 96 px, B21 = 384 px (≈203 dpi, 8 px/mm)" is
+**correct**.
+
+> **Correction to the brief:** density is not 1–5 on both. A D11 accepts 1–3.
+> LabelBench clamps the density control to the connected model's range.
+
+### Print task selection — protocol-version dependent
+
+`niimbluelib/src/print_tasks/index.ts`:
+
+```ts
+export const modelPrintTasks = {
+  D11_V1:  [M.D11, M.D11S],
+  B21_V1:  [M.B21],
+  B21_L2B: [M.B21_L2B],
+  D110:    [M.B21S, M.B21S_C2B, M.D110, { m: M.D11, v: 1 }, { m: M.D11, v: 2 }],
+  B1:      [M.D110_M, M.B1, M.B21_C2B, M.M2_H, M.N1, M.D101],
+  D110M_V4:[{ m: M.D110_M, v: 4 }, M.D11_H, M.B21_PRO, M.B1_PRO, M.C1, M.EP1C],
+  H1S:     [M.H1S],
+};
+```
+
+`findPrintTask(model, protocolVersion)` prefers an exact model+version match, and
+falls back to `D110M_V4` for any unknown model reporting protocol version ≥ 4.
+
+**Consequence:** a D11 reporting protocol version 1 or 2 uses the **D110** print
+task, not the legacy `D11_V1` one. These use different packet framing
+(`setPrintQuantity` and `printClear` vs. a per-copy loop). Which one a given
+D11 unit uses is a **hardware** question — open.
+
+### Density is sent unconditionally
+
+`B21V1PrintTask.printInit()` sends `PacketGenerator.setDensity(density)` with no
+capability check, and so does `D110PrintTask`. This is consistent with the
+brief's warning that some newer B21 firmware ignores the density command: the
+command is sent, and the firmware may discard it. **Cannot be distinguished
+from software — needs a hardware A/B test.**
+
+### Rotation
+
+Rotation is not a printer command. It is applied to the raster before encoding:
+`ImageEncoder.encodeCanvas(canvas, pageColor, printDirection)` with
+`printDirection === "left"` rotating 90° clockwise. The width that must fit the
+print head is therefore the canvas **height** when the direction is "left", and
+the canvas **width** when it is "top".
+
+LabelBench's `checkPrintWidth()` implements exactly that mapping.
+
+### Transports
+
+`niimbluelib/src/client/`:
+
+| Transport | File | Notes |
+|---|---|---|
+| Web Bluetooth | `bluetooth_impl.ts` | `navigator.bluetooth.requestDevice()`, accepts `authorizedDevice` for one-click reconnect |
+| Web Serial | `serial_impl.ts` | `navigator.serial.requestPort()`, accepts `authorizedPort` for one-click reconnect |
+
+The library already supports the reconnect path; upstream's UI just never
+exposed it. LabelBench exposes it.
+
+---
+
+## 2. The hardware on this desk
+
+A NIIMBOT printer is **already plugged into this machine** over USB:
+
+```
+$ udevadm info --query=property --name=/dev/ttyACM0
+ID_VENDOR=NIIMBOT
+ID_MODEL=B1_LABEL_PRINTER
+ID_SERIAL=NIIMBOT_B1_LABEL_PRINTER_B1-H83003154
+ID_VENDOR_ID=3513
+ID_MODEL_ID=0002
+ID_USB_DRIVER=cdc_acm
+
+$ lsusb
+Bus 001 Device 022: ID 3513:0002 NIIMBOT B1 LABEL PRINTER
+```
+
+This is a **B1**, not a B21 — but it is the same USB profile: CDC-ACM,
+VID:PID `3513:0002`, 384 px print head. It exercises the **Web Serial** path
+identically to a B21. The only difference is the print task selected
+(`B1` vs `B21_V1`), which affects packet framing, not transport or raster width.
+
+The user account is already in the `dialout` group, so the browser can open
+`/dev/ttyACM0` without extra setup.
+
+---
+
+## 3. Verified by execution
+
+| Check | Result |
+|---|---|
+| API server starts, serves the SPA and the REST API | ✅ |
+| `GET /api/health` | ✅ `{"status":"ok",...}` |
+| SPA index and deep-link fallback | ✅ HTTP 200 |
+| Template create / list / get / update / delete | ✅ |
+| Version snapshot + restore | ✅ (caught and fixed a real bug — see below) |
+| Asset upload + fetch | ✅ |
+| API test suite | ✅ 14/14 |
+| `tsc --noEmit` (server) | ✅ clean |
+| `svelte-check` (SPA) | ✅ 0 errors |
+| `vite build` (SPA) | ✅ built |
+| Server reachable on the LAN interface (`10.10.17.185:3000`) | ✅ |
+| mkcert CA created + server certificate issued | ✅ (no root needed) |
+| Docker Compose build (app + Caddy) | see §5 |
+
+**Bug caught by the test suite:** a version restore replayed only the canvas, so
+a restored template could carry a stale `name` and `model` next to new artwork.
+Every column the restore path writes is now snapshotted. This is exactly the
+class of defect that passes field-level checks and only surfaces when someone
+restores a template.
+
+---
+
+## 4. Open — requires the physical printers
+
+These cannot be settled without the hardware.
+
+### 4.1 The B1/B21 over USB (Web Serial)
+
+- [ ] `navigator.serial.requestPort()` lists the CDC-ACM device
+- [ ] The model is detected as `B1` (or `B21`) and the print task resolves
+- [ ] A test raster prints, at the correct physical width
+- [ ] **Density**: does the unit honour `setDensity`? Run the same raster at
+      density 1 and 5 and compare. This is the brief's open question about
+      newer B21 firmware.
+- [ ] Rotation: `printDirection = "left"` lands the label the right way up
+
+### 4.2 The D11 over Bluetooth
+
+Requires the D11 on the **other** workstation, with Bluetooth enabled there.
+
+- [ ] `navigator.bluetooth.requestDevice()` lists the D11
+- [ ] The model is detected as `D11`, and the print task resolves —
+      **this is the real open question**: does it use `D11_V1` or `D110`?
+      That depends on the unit's protocol version, and the two use different
+      packet framing.
+- [ ] A test raster prints at 96 px width
+- [ ] Density 1–3 (the D11's actual range)
+
+### 4.3 Environment notes for the workstations
+
+| Item | Status |
+|---|---|
+| Chrome 157 on this machine | ✅ installed |
+| `bluetooth` service on this machine | ⚠️ **inactive** — `sudo systemctl enable --now bluetooth` if the D11 is tested here |
+| User in `dialout` group (serial access) | ✅ |
+| Chrome on Linux may need `chrome://flags/#enable-experimental-web-platform-features` for Web Serial | try without it first; it is shipped by default in recent Chrome |
+| mDNS | ⚠️ avahi is running but resolves `yaniv-OptiPlex-7050.local` to a **docker bridge**, not the LAN IP — see §5 |
+
+---
+
+## 5. Open — network and packaging
+
+- [ ] **mDNS conflict.** `yaniv-OptiPlex-7050.local` currently resolves to
+      `172.23.0.1`, a docker bridge, because avahi publishes every interface.
+      Fix: restrict avahi to the LAN interface —
+      `allow-interfaces=enp0s31f6` in `/etc/avahi/avahi-daemon.conf`, plus
+      `host-name=labelbench` to publish `labelbench.local` without renaming
+      the machine.
+- [ ] **Firewall** — allow inbound 443 (and 80 for the redirect) on the LAN
+      interface.
+- [ ] **Trusted origin** — trust the mkcert root CA on the server and on each
+      workstation.
+- [ ] **Docker Compose build** of the app + Caddy image.
+- [ ] **Two-workstation acceptance test** (§10 of the brief): two Chromium
+      workstations open the central URL, connect the moved printer with one
+      click, and print a manual label and a CSV batch — zero local install,
+      zero template copying.

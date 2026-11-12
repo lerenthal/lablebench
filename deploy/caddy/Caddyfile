@@ -1,0 +1,56 @@
+# LabelBench — Caddy TLS termination
+#
+# TLS is terminated here, in front of the LabelBench app.
+#
+# The certificates come from an internal CA generated with mkcert (see
+# scripts/setup-certs.sh). Each workstation trusts that root CA once — without a
+# browser-trusted HTTPS origin, navigator.bluetooth and navigator.serial are
+# unavailable and printing cannot work at all.
+#
+# This file is mounted read-only into the Caddy container; the certs are
+# mounted from deploy/caddy/certs.
+
+{
+	# No email, no ACME — this is a fully offline LAN.
+	admin off
+	auto_https off
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+# The label-design SPA and the API live behind the same origin, so the browser
+# sees a single trusted origin and one certificate.
+{$LABELBENCH_HOST:labelbench.local} {
+	encode zstd gzip
+
+	tls /certs/labelbench.pem /certs/labelbench-key.pem
+
+	header {
+		# The app is entirely local; nothing should be embedded cross-origin.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Proxy the API to the LabelBench server.
+	handle /api/* {
+		reverse_proxy app:3000
+	}
+
+	# Everything else is the SPA.
+	handle {
+		reverse_proxy app:3000
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+# Plain HTTP exists only to redirect to HTTPS.
+http://{$LABELBENCH_HOST:labelbench.local} {
+	redir https://{host}{uri} permanent
+}

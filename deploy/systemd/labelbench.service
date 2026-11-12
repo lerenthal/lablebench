@@ -1,0 +1,40 @@
+[Unit]
+Description=LabelBench — label design server and template store
+Documentation=https://github.com/your-org/labelbench
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=labelbench
+Group=labelbench
+
+WorkingDirectory=/opt/labelbench
+ExecStart=/usr/bin/node /opt/labelbench/dist/server.js
+
+Environment=NODE_ENV=production
+Environment=LABELBENCH_HOST=0.0.0.0
+Environment=LABELBENCH_PORT=3000
+Environment=LABELBENCH_DATA_DIR=/var/lib/labelbench
+Environment=LABELBENCH_DB_PATH=/var/lib/labelbench/labelbench.db
+Environment=LABELBENCH_ASSET_DIR=/var/lib/labelbench/assets
+Environment=LABELBENCH_STATIC_DIR=/opt/labelbench/public
+# Phase 1: no auth. The seam for later:
+# Environment=LABELBENCH_AUTH_MODE=apikey
+# Environment=LABELBENCH_API_KEY=change-me
+Environment=LOG_LEVEL=info
+
+Restart=on-failure
+RestartSec=5
+
+# The app only needs to write to its own data directory.
+StateDirectory=labelbench
+StateDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/labelbench
+
+[Install]
+WantedBy=multi-user.target
