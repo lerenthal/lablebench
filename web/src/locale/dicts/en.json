@@ -336,5 +336,9 @@
   "params.serial.add": "Add a serial number",
   "batch.serial.suffix": "Suffix",
   "batch.serial.counter": "Counter",
-  "editor.save_load": "Save / Load"
+  "editor.save_load": "Save / Load",
+  "main.tagline": "Label design for NIIMBOT printers",
+  "main.standalone": "Desktop app",
+  "main.language": "Language",
+  "main.debug": "Debug"
 }

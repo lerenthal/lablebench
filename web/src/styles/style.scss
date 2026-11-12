@@ -14,8 +14,100 @@
 @import "bootstrap/scss/transitions";
 @import "font";
 
-// Keep the scrollbar space reserved, so the centered layout does not jump sideways when a scrollbar
-// appears or disappears (e.g. after adding objects or opening a dropdown near the bottom of the page).
+/*
+ * LabelBench design tokens
+ * ---------------------------------------------------------------------------
+ * Bootstrap 4 is imported above for its layout and grid, but none of its
+ * appearance is used: the controls are restyled here from these tokens, so
+ * the whole app looks like one thing rather than a stock admin template.
+ *
+ * Dark is the default, because the app is a tool that sits on a bench next
+ * to a printer and is used for long stretches. The light theme follows the
+ * operating system.
+ */
+
+:root {
+  /* --- type --- */
+  --lb-font-sans: "Noto Sans Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --lb-font-mono: ui-monospace, "JetBrains Mono", "Cascadia Code", "SF Mono", Menlo, monospace;
+
+  --lb-text-xs: 0.75rem;
+  --lb-text-sm: 0.8125rem;
+  --lb-text-base: 0.875rem;
+  --lb-text-md: 1rem;
+  --lb-text-lg: 1.125rem;
+  --lb-text-xl: 1.375rem;
+
+  /* --- space --- */
+  --lb-space-1: 0.25rem;
+  --lb-space-2: 0.5rem;
+  --lb-space-3: 0.75rem;
+  --lb-space-4: 1rem;
+  --lb-space-5: 1.5rem;
+  --lb-space-6: 2rem;
+
+  /* --- radius --- */
+  --lb-radius-sm: 6px;
+  --lb-radius: 9px;
+  --lb-radius-lg: 14px;
+  --lb-radius-pill: 999px;
+
+  /* --- dark palette (the default) --- */
+  --lb-bg: #0f1116;
+  --lb-bg-grad: radial-gradient(1200px 600px at 20% -10%, #1b2030 0%, transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, #17202e 0%, transparent 55%);
+  --lb-surface: #171a22;
+  --lb-surface-raised: #1e222c;
+  --lb-surface-sunken: #0b0d12;
+  --lb-surface-hover: #252a36;
+  --lb-border: #272c38;
+  --lb-border-strong: #39404f;
+  --lb-text: #e8ebf2;
+  --lb-text-muted: #99a2b5;
+  --lb-text-faint: #6b7488;
+  --lb-accent: #5b8cff;
+  --lb-accent-hover: #7aa2ff;
+  --lb-accent-soft: rgba(91, 140, 255, 0.14);
+  --lb-accent-contrast: #ffffff;
+  --lb-danger: #ff6b6b;
+  --lb-danger-soft: rgba(255, 107, 107, 0.14);
+  --lb-success: #4ade80;
+  --lb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --lb-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --lb-shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.6);
+  --lb-ring: 0 0 0 3px rgba(91, 140, 255, 0.35);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --lb-bg: #f4f6fa;
+    --lb-bg-grad: radial-gradient(1200px 600px at 20% -10%, #e6ecf8 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, #e8f0f4 0%, transparent 55%);
+    --lb-surface: #ffffff;
+    --lb-surface-raised: #ffffff;
+    --lb-surface-sunken: #eef1f6;
+    --lb-surface-hover: #f2f5fa;
+    --lb-border: #dfe4ed;
+    --lb-border-strong: #c3ccdb;
+    --lb-text: #1a1f2b;
+    --lb-text-muted: #5c6577;
+    --lb-text-faint: #8b93a5;
+    --lb-accent: #2f6bff;
+    --lb-accent-hover: #1f56e0;
+    --lb-accent-soft: rgba(47, 107, 255, 0.1);
+    --lb-accent-contrast: #ffffff;
+    --lb-danger: #d92d20;
+    --lb-danger-soft: rgba(217, 45, 32, 0.1);
+    --lb-success: #12874a;
+    --lb-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+    --lb-shadow: 0 8px 28px rgba(16, 24, 40, 0.1);
+    --lb-shadow-lg: 0 28px 70px rgba(16, 24, 40, 0.16);
+    --lb-ring: 0 0 0 3px rgba(47, 107, 255, 0.22);
+  }
+}
+
+/* Keep the scrollbar space reserved, so the centered layout does not jump sideways when a scrollbar
+// appears or disappears (e.g. after adding objects or opening a dropdown near the bottom of the page). */
 @supports (scrollbar-gutter: stable) {
   html {
     scrollbar-gutter: stable;
@@ -29,19 +121,377 @@
 }
 
 body {
-  font-family: "Noto Sans Variable", sans-serif;
+  font-family: var(--lb-font-sans);
+  font-size: var(--lb-text-base);
+  color: var(--lb-text);
+  background-color: var(--lb-bg);
+  background-image: var(--lb-bg-grad);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--lb-text);
+  font-weight: 600;
+  letter-spacing: -0.011em;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--lb-font-mono);
+  font-size: 0.9em;
+}
+
+.text-secondary {
+  color: var(--lb-text-muted) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Buttons
+ * -------------------------------------------------------------------------- */
+
+.btn {
+  border-radius: var(--lb-radius);
+  border: 1px solid transparent;
+  font-weight: 500;
+  letter-spacing: 0.002em;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease,
+    box-shadow 0.14s ease, transform 0.08s ease;
+}
+
+.btn:focus-visible,
+.btn.focus {
+  box-shadow: var(--lb-ring) !important;
+  outline: none;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-sm {
+  border-radius: var(--lb-radius-sm);
+  font-size: var(--lb-text-sm);
+  padding: 0.3rem 0.65rem;
+}
+
+/* The default button was a flat grey slab; it is now a quiet surface that
+   lifts on hover rather than a filled block that competes with the accent. */
+.btn-secondary {
+  background-color: var(--lb-surface-raised);
+  border-color: var(--lb-border);
+  color: var(--lb-text);
+}
+
+.btn-secondary:hover,
+.btn-secondary:focus {
+  background-color: var(--lb-surface-hover);
+  border-color: var(--lb-border-strong);
+  color: var(--lb-text);
+}
+
+.btn-primary {
+  background-color: var(--lb-accent);
+  border-color: var(--lb-accent);
+  color: var(--lb-accent-contrast);
+  box-shadow: var(--lb-shadow-sm);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+  background-color: var(--lb-accent-hover);
+  border-color: var(--lb-accent-hover);
+  color: var(--lb-accent-contrast);
+}
+
+.btn-outline-secondary {
+  border-color: var(--lb-border-strong);
+  color: var(--lb-text);
+}
+
+.btn-outline-secondary:hover,
+.btn-outline-secondary:focus {
+  background-color: var(--lb-surface-hover);
+  border-color: var(--lb-accent);
+  color: var(--lb-text);
+}
+
+.btn-warning {
+  background-color: #f5a524;
+  border-color: #f5a524;
+  color: #1a1f2b;
+}
+
+.btn-danger {
+  background-color: var(--lb-danger);
+  border-color: var(--lb-danger);
+  color: #ffffff;
+}
+
+.btn-link {
+  color: var(--lb-text-muted);
+  text-decoration: none;
+}
+
+.btn-link:hover {
+  color: var(--lb-text);
+}
+
+/* An active toolbar button (a model toggle, a toggled option) reads as
+   selected rather than merely blue. */
+.btn.active,
+.btn-primary.active {
+  background-color: var(--lb-accent-soft);
+  border-color: var(--lb-accent);
+  color: var(--lb-accent);
+}
+
+/* --------------------------------------------------------------------------
+ * Forms
+ * -------------------------------------------------------------------------- */
+
+.form-control,
+.form-select {
+  background-color: var(--lb-surface-sunken);
+  border: 1px solid var(--lb-border);
+  border-radius: var(--lb-radius-sm);
+  color: var(--lb-text);
+  font-size: var(--lb-text-base);
+  padding: 0.4rem 0.65rem;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: var(--lb-surface-sunken);
+  border-color: var(--lb-accent);
+  color: var(--lb-text);
+  box-shadow: var(--lb-ring);
+}
+
+.form-control::placeholder {
+  color: var(--lb-text-faint);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  background-color: var(--lb-surface);
+  color: var(--lb-text-faint);
+  opacity: 0.7;
+}
+
+.form-select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2399a2b5' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+}
+
+.input-group-text {
+  background-color: var(--lb-surface-raised);
+  border: 1px solid var(--lb-border);
+  color: var(--lb-text-muted);
+  font-size: var(--lb-text-sm);
+  font-weight: 500;
+}
+
+.input-group > .form-control,
+.input-group > .form-select {
+  border-radius: var(--lb-radius-sm);
+}
+
+.form-check-input {
+  background-color: var(--lb-surface-sunken);
+  border: 1px solid var(--lb-border-strong);
+  border-radius: 4px;
+}
+
+.form-check-input:checked {
+  background-color: var(--lb-accent);
+  border-color: var(--lb-accent);
+}
+
+.form-check-input:focus {
+  border-color: var(--lb-accent);
+  box-shadow: var(--lb-ring);
+}
+
+.form-check-label {
+  color: var(--lb-text);
+}
+
+label {
+  color: var(--lb-text-muted);
+  font-size: var(--lb-text-sm);
+  font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+ * Modals, dropdowns
+ * -------------------------------------------------------------------------- */
+
+.modal-content {
+  background-color: var(--lb-surface);
+  border: 1px solid var(--lb-border);
+  border-radius: var(--lb-radius-lg);
+  box-shadow: var(--lb-shadow-lg);
+  color: var(--lb-text);
+}
+
+.modal-header,
+.modal-footer {
+  border-color: var(--lb-border);
+}
+
+.modal-header .close {
+  color: var(--lb-text-muted);
+  opacity: 1;
+  text-shadow: none;
+}
+
+.modal-header .close:hover {
+  color: var(--lb-text);
+}
+
+.modal-backdrop.show {
+  opacity: 0.6;
+  background-color: #05070c;
+}
+
+.dropdown-menu {
+  background-color: var(--lb-surface-raised);
+  border: 1px solid var(--lb-border);
+  border-radius: var(--lb-radius);
+  box-shadow: var(--lb-shadow);
+  padding: var(--lb-space-1);
+}
+
+.dropdown-item {
+  border-radius: var(--lb-radius-sm);
+  color: var(--lb-text);
+  font-size: var(--lb-text-sm);
+  padding: 0.4rem 0.6rem;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+  background-color: var(--lb-surface-hover);
+  color: var(--lb-text);
+}
+
+.dropdown-divider {
+  border-color: var(--lb-border);
+}
+
+.dropdown-header {
+  color: var(--lb-text-faint);
+  font-size: var(--lb-text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+ * The app shell
+ * -------------------------------------------------------------------------- */
+
+.app-bar {
+  align-items: center;
+  background: color-mix(in srgb, var(--lb-surface) 82%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--lb-border);
+  display: flex;
+  gap: var(--lb-space-4);
+  justify-content: space-between;
+  padding: var(--lb-space-3) var(--lb-space-5);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.app-bar__brand {
+  align-items: center;
+  display: flex;
+  gap: var(--lb-space-3);
+  min-width: 0;
+}
+
+.app-bar__mark {
+  align-items: center;
+  background: linear-gradient(140deg, var(--lb-accent) 0%, #9b6bff 100%);
+  border-radius: var(--lb-radius);
+  box-shadow: var(--lb-shadow-sm);
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 1.15rem;
+  height: 2.1rem;
+  justify-content: center;
+  width: 2.1rem;
+}
+
+.app-bar__name {
+  color: var(--lb-text);
+  font-size: var(--lb-text-lg);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.app-bar__tag {
+  color: var(--lb-text-faint);
+  font-size: var(--lb-text-sm);
+  line-height: 1.2;
+}
+
+.app-bar__status {
+  align-items: center;
+  display: flex;
+  gap: var(--lb-space-3);
+}
+
+/* A card for the working area, so the canvas is not floating on the page. */
+.work-panel {
+  background: color-mix(in srgb, var(--lb-surface) 70%, transparent);
+  border: 1px solid var(--lb-border);
+  border-radius: var(--lb-radius-lg);
+  box-shadow: var(--lb-shadow);
+  padding: var(--lb-space-4);
+}
+
+.app-footer {
+  align-items: center;
+  border-top: 1px solid var(--lb-border);
+  color: var(--lb-text-faint);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--lb-text-sm);
+  gap: var(--lb-space-4);
+  justify-content: space-between;
+  margin-top: var(--lb-space-6);
+  padding: var(--lb-space-3) var(--lb-space-5);
+}
+
+.app-footer a {
+  color: var(--lb-text-muted);
+  text-decoration: none;
+}
+
+.app-footer a:hover {
+  color: var(--lb-text);
 }
 
 .toastify.toast-danger {
-  background: var(--bs-danger-bg-subtle);
-  border: 1px solid var(--bs-danger-border-subtle);
-  color: var(--bs-danger-text-emphasis);
+  background: var(--lb-danger-soft);
+  border: 1px solid var(--lb-danger);
+  color: var(--lb-danger);
 }
 
 .toastify.toast-info {
-  background: var(--bs-success-bg-subtle);
-  border: 1px solid var(--bs-success-border-subtle);
-  color: var(--bs-success-text-emphasis);
+  background: var(--lb-accent-soft);
+  border: 1px solid var(--lb-accent);
+  color: var(--lb-text);
 }
 
 .cursor-help {

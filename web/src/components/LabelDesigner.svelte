@@ -980,11 +980,14 @@
 
 <style>
   .canvas-wrapper {
-    border: 1px solid rgba(0, 0, 0, 0.4);
-    background-color: rgba(60, 55, 63, 0.5);
+    border: 1px solid var(--lb-border);
+    background-color: var(--lb-surface-sunken);
+    border-radius: var(--lb-radius);
+    box-shadow: var(--lb-shadow);
     max-width: 100%;
     max-height: 70vh;
     overflow: auto;
+    padding: var(--lb-space-3);
   }
   .canvas-wrapper.print-start-left {
     border-left: 2px solid #ff4646;

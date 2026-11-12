@@ -85,5 +85,8 @@
 
 # Plain HTTP exists only to redirect to HTTPS.
 http://{$LABELBENCH_HOST:labelbench.local}, http://{$LABELBENCH_IP:10.10.17.185} {
-	redir https://{host}{uri} permanent
+	# The redirect names the external HTTPS port explicitly. {host} would carry
+	# the HTTP port the client actually reached, and redirecting to that would
+	# send the browser to a plain-HTTP port over HTTPS.
+	redir https://{$LABELBENCH_HOST:labelbench.local}:{$LABELBENCH_HTTPS_PORT:8443}{uri} permanent
 }

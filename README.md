@@ -106,7 +106,7 @@ The whole data set is two things: `labelbench-data` (a Docker volume holding
 Check it:
 
 ```bash
-curl -k https://labelbench.local/api/health
+curl -k https://labelbench.local:8443/api/health
 # {"status":"ok","service":"labelbench-server",...}
 ```
 
@@ -166,7 +166,7 @@ The hostname should be one the LAN can resolve. Options, in order of preference:
    every platform. No per-machine DNS configuration at all.
 2. **A hosts-file entry** on each workstation pointing `labelbench.lab.local` at
    the server's IP.
-3. **The server's address directly** — `https://10.10.17.185/`. The certificate
+3. **The server's address directly** — `https://10.10.17.185:8443/`. The certificate
    carries the IP as a SAN and the server answers on both, so this works even
    when the name does not resolve. A browser sends no SNI for an IP address,
    which is why the Caddyfile gives the site a bare `:443` address: without it
@@ -183,13 +183,13 @@ The certificate already carries every name you are likely to use
 ## Trusting the CA on a workstation
 
 One time per machine. The server publishes its root CA at
-`https://labelbench.local/rootCA.pem`, so a new workstation needs no `scp` and
+`https://labelbench.local:8443/rootCA.pem`, so a new workstation needs no `scp` and
 no file handoff — just a download.
 
 **Linux**
 
 ```bash
-curl -k https://labelbench.local/rootCA.pem -o rootCA.pem
+curl -k https://labelbench.local:8443/rootCA.pem -o rootCA.pem
 
 # Check it before you trust it. It must print exactly:
 #   sha256 Fingerprint=F4:E5:16:F1:25:B8:19:14:0B:96:9F:AC:A0:E8:D3:BD:1C:95:7E:DF:85:58:DA:60:64:4A:8A:78:41:13:9E:55
@@ -209,21 +209,33 @@ cross switches), use the server's address instead — the certificate carries
 it as an IP SAN and the server answers on both:
 
 ```bash
-curl -k https://10.10.17.185/rootCA.pem -o rootCA.pem
+curl -k https://10.10.17.185:8443/rootCA.pem -o rootCA.pem
 ```
 
 **Windows** (PowerShell, administrator)
 
 ```powershell
-curl.exe -k https://labelbench.local/rootCA.pem -o rootCA.pem
-certutil -hashfile rootCA.pem SHA256   # must match the fingerprint above
-Import-Certificate -FilePath .\rootCA.pem -CertStoreLocation Cert:\LocalMachine\Root
+curl.exe -k https://labelbench.local:8443/rootCA.pem -o rootCA.cer
+
+# Check the CERTIFICATE's fingerprint, not the file's hash.
+$cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 ".\rootCA.cer"
+($cert.GetCertHashString("SHA256") -replace '(..)(?=.)','$1:').TrimEnd(':')
+# must print exactly:
+#   F4:E5:16:F1:25:B8:19:14:0B:96:9F:AC:A0:E8:D3:BD:1C:95:7E:DF:85:58:DA:60:64:4A:8A:78:41:13:9E:55
+
+Import-Certificate -FilePath .\rootCA.cer -CertStoreLocation Cert:\LocalMachine\Root
 ```
+
+> `certutil -hashfile rootCA.pem SHA256` is **not** the check you want: it
+> hashes the downloaded file, which is not the certificate's fingerprint, so it
+> will never match the value above even when the CA is the right one. The
+> `.cer` extension matters too — the Windows certificate import dialog does
+> not always recognise a `.pem` file.
 
 **macOS**
 
 ```bash
-curl -k https://labelbench.local/rootCA.pem -o ~/Downloads/rootCA.pem
+curl -k https://labelbench.local:8443/rootCA.pem -o ~/Downloads/rootCA.pem
 openssl x509 -in ~/Downloads/rootCA.pem -noout -fingerprint -sha256
 sudo security add-trusted-cert -d -r trustRoot \
   -k /Library/Keychains/System.keychain ~/Downloads/rootCA.pem
@@ -236,7 +248,7 @@ sudo security add-trusted-cert -d -r trustRoot \
 > certificate warning. Copying `rootCA.pem` directly avoids the problem
 > entirely. `scripts/setup-certs.sh` prints the correct commands.
 
-Then open `https://labelbench.local` — the lock icon should be normal, not a
+Then open `https://labelbench.local:8443` — the lock icon should be normal, not a
 warning. That matters beyond cosmetics: Web Bluetooth and Web Serial only
 exist in a browser-trusted secure context, so an untrusted certificate makes
 printing unavailable entirely.
@@ -266,6 +278,72 @@ Two things about the mount are deliberate and worth not undoing:
 
 ---
 
+## Opening LabelBench from another workstation
+
+The server is reachable on the LAN and has been since it was deployed:
+Caddy publishes on every interface, and the firewall allows the LAN subnet.
+Nothing needs to be installed on the workstation beyond trusting the CA above.
+
+### The ports
+
+| Port | Purpose |
+|---|---|
+| **8443** | HTTPS — this is the origin the workstations open |
+| **8082** | HTTP, which exists only to redirect to HTTPS |
+
+LabelBench deliberately does **not** take 80 and 443. This host runs several
+apps, and the standard web ports belong to whichever one is the front door;
+a second app could not have them. Both ports are settings, so LabelBench
+can be moved out of the way — or moved back — without touching the code:
+
+```bash
+# .env
+LABELBENCH_HTTPS_PORT=8443
+LABELBENCH_HTTP_PORT=8082
+```
+
+Check what is already taken before picking:
+
+```bash
+docker ps --format '{{.Ports}}' | grep -oE '0\.0\.0\.0:[0-9]+' | sort -u
+```
+
+A new port needs a matching firewall rule, or the workstations cannot reach
+it:
+
+```bash
+sudo ufw allow from 10.10.17.0/24 to any port 8443 proto tcp comment 'LabelBench HTTPS'
+sudo ufw allow from 10.10.17.0/24 to any port 8082 proto tcp comment 'LabelBench HTTP'
+```
+
+Changing the port does not change the certificate, so a workstation that
+already trusts the CA keeps working — only the URL changes.
+
+Open `https://labelbench.local:8443` in Chrome. If the name does not resolve —
+mDNS does not always cross a switch — use `https://10.10.17.185:8443/` instead;
+the certificate carries the address as a SAN and the server answers on both.
+
+> **The server is on the LAN, not on the internet.** Ports 80 and 443 are
+> published on the host's interfaces and the firewall admits the LAN subnet
+> only. The app has no authentication in Phase 1, so anything that can reach
+> the port can read and write every template. Exposing it beyond the lab
+> would need the API key switched on first — see "Turning on an API key".
+
+### Where the printer has to be
+
+Printing is **browser-direct**, and that is the whole design: the browser on
+the workstation in front of you talks to the printer plugged into *that*
+workstation over Web Bluetooth or Web Serial. The server never touches a
+printer.
+
+So the printer has to be physically connected to the machine you are sitting
+at. A workstation that cannot reach the printer cannot print to it — not
+because of a limitation in the app, but because the print path is USB or
+Bluetooth to the local machine, by design. Templates are central; the
+printer is local.
+
+---
+
 ## Adding the printer on a new workstation
 
 The printer moves between machines. Each workstation pairs with it once; the
@@ -274,7 +352,7 @@ reconnects in one click.
 
 1. Plug the printer into the workstation (USB for a B21/B1, or pair it over
    Bluetooth for a D11).
-2. Open `https://labelbench.local` in Chrome or Edge.
+2. Open `https://labelbench.local:8443` in Chrome or Edge.
 3. Click **Connect printer** and choose the transport:
    - **Web Bluetooth (USB)** — for a D11. Pick the device from the browser's
      chooser.
