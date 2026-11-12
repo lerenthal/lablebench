@@ -48,6 +48,15 @@
   let featureSupport = $state<AvailableTransports>({ webBluetooth: false, webSerial: false, capacitorBle: false });
   /** WebUSB, which is how a DYMO LabelWriter is reached. */
   let webUsbSupported = $state<boolean>(false);
+  /**
+   * Which family of printer the user has picked.
+   *
+   * The buttons pick a printer; the button beside them connects it. The
+   * LabelWriter used to connect the moment it was picked, while the
+   * NIIMBOT transports only selected — so the same gesture did two different
+   * things.
+   */
+  let selectedFamily = $state<"niim" | "dymo">("niim");
   let verboseInfoShow = $state<boolean>(false);
   /** Printers this machine is already allowed to use — the one-click targets. */
   let reconnectTargets = $state<GrantedDevice[]>([]);
@@ -431,7 +440,10 @@
       <button
         disabled={$connectionState === "connecting"}
         class="btn text-nowrap {connectionType === 'bluetooth' ? 'btn-light' : 'btn-outline-secondary'}"
-        onclick={() => switchConnectionType("bluetooth")}>
+        onclick={() => {
+          selectedFamily = "niim";
+          switchConnectionType("bluetooth");
+        }}>
         <MdIcon icon="bluetooth" />
         {$tr("connector.bluetooth")}
       </button>
@@ -440,7 +452,10 @@
       <button
         disabled={$connectionState === "connecting"}
         class="btn text-nowrap {connectionType === 'serial' ? 'btn-light' : 'btn-outline-secondary'}"
-        onclick={() => switchConnectionType((connectionType = "serial"))}>
+        onclick={() => {
+          selectedFamily = "niim";
+          switchConnectionType((connectionType = "serial"));
+        }}>
         <MdIcon icon="usb" />
         {$tr("connector.serial")}
       </button>
@@ -449,7 +464,10 @@
       <button
         disabled={$connectionState === "connecting"}
         class="btn text-nowrap {connectionType === 'capacitor-ble' ? 'btn-light' : 'btn-outline-secondary'}"
-        onclick={() => switchConnectionType((connectionType = "capacitor-ble"))}>
+        onclick={() => {
+          selectedFamily = "niim";
+          switchConnectionType((connectionType = "capacitor-ble"));
+        }}>
         <MdIcon icon="usb" />
         Capacitor BLE
       </button>
@@ -458,8 +476,8 @@
     {#if webUsbSupported}
       <button
         disabled={$connectionState === "connecting"}
-        class="btn text-nowrap btn-outline-secondary"
-        onclick={onDymoConnectClicked}
+        class="btn text-nowrap {selectedFamily === 'dymo' ? 'btn-light' : 'btn-outline-secondary'}"
+        onclick={() => (selectedFamily = "dymo")}
         title={$tr("connector.dymo.hint")}>
         <MdIcon icon="usb" />
         {$tr("connector.dymo")}
@@ -495,8 +513,11 @@
     <button
       class="btn btn-primary"
       disabled={$connectionState === "connecting" ||
-        (!featureSupport.capacitorBle && !featureSupport.webBluetooth && !featureSupport.webSerial)}
-      onclick={onConnectClicked}>
+        (selectedFamily === "dymo"
+          ? !webUsbSupported
+          : !featureSupport.capacitorBle && !featureSupport.webBluetooth && !featureSupport.webSerial)}
+      onclick={() => (selectedFamily === "dymo" ? onDymoConnectClicked() : onConnectClicked())}
+      title={selectedFamily === "dymo" ? $tr("connector.dymo.hint") : $tr("connector.connect")}>
       <MdIcon icon="power" />
     </button>
   {/if}
