@@ -154,15 +154,43 @@ The certificate already carries every name you are likely to use
 
 ## Trusting the CA on a workstation
 
-One time per machine. The CA root is at `~/.local/share/mkcert/rootCA.pem` on the
-server.
+One time per machine. The server publishes its root CA at
+`https://labelbench.local/rootCA.pem`, so a new workstation needs no `scp` and
+no file handoff — just a download.
 
 **Linux**
 
 ```bash
-scp <server>:~/.local/share/mkcert/rootCA.pem ~/
-sudo cp ~/rootCA.pem /usr/local/share/ca-certificates/labelbench-rootCA.crt
+curl -k https://labelbench.local/rootCA.pem -o rootCA.pem
+
+# Check it before you trust it. It must print exactly:
+#   sha256 Fingerprint=F4:E5:16:F1:25:B8:19:14:0B:96:9F:AC:A0:E8:D3:BD:1C:95:7E:DF:85:58:DA:60:64:4A:8A:78:41:13:9E:55
+openssl x509 -in rootCA.pem -noout -fingerprint -sha256
+
+sudo cp rootCA.pem /usr/local/share/ca-certificates/labelbench-rootCA.crt
 sudo update-ca-certificates
+```
+
+The `-k` on the download is unavoidable — the workstation does not trust the
+CA yet, that is the whole point of the step. The fingerprint check is what
+makes it safe: it proves you fetched the CA you were meant to fetch. The
+fingerprint above is the one in this lab's CA.
+
+**Windows** (PowerShell, administrator)
+
+```powershell
+curl.exe -k https://labelbench.local/rootCA.pem -o rootCA.pem
+certutil -hashfile rootCA.pem SHA256   # must match the fingerprint above
+Import-Certificate -FilePath .\rootCA.pem -CertStoreLocation Cert:\LocalMachine\Root
+```
+
+**macOS**
+
+```bash
+curl -k https://labelbench.local/rootCA.pem -o ~/Downloads/rootCA.pem
+openssl x509 -in ~/Downloads/rootCA.pem -noout -fingerprint -sha256
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain ~/Downloads/rootCA.pem
 ```
 
 > **Do not use `sudo mkcert -install` for this.** Under `sudo`, `HOME` becomes
@@ -172,24 +200,10 @@ sudo update-ca-certificates
 > certificate warning. Copying `rootCA.pem` directly avoids the problem
 > entirely. `scripts/setup-certs.sh` prints the correct commands.
 
-**Windows** (PowerShell, administrator)
-
-```powershell
-scp <server>:/home/yaniv/.local/share/mkcert/rootCA.pem $env:USERPROFILE\Downloads\
-Import-Certificate -FilePath "$env:USERPROFILE\Downloads\rootCA.pem" `
-  -CertStoreLocation Cert:\LocalMachine\Root
-```
-
-**macOS**
-
-```bash
-scp <server>:~/.local/share/mkcert/rootCA.pem ~/Downloads/
-sudo security add-trusted-cert -d -r trustRoot \
-  -k /Library/Keychains/System.keychain ~/Downloads/rootCA.pem
-```
-
 Then open `https://labelbench.local` — the lock icon should be normal, not a
-warning.
+warning. That matters beyond cosmetics: Web Bluetooth and Web Serial only
+exist in a browser-trusted secure context, so an untrusted certificate makes
+printing unavailable entirely.
 
 ---
 

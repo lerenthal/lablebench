@@ -34,6 +34,22 @@
 		-Server
 	}
 
+	# The root CA is published so a new workstation can trust the origin in one
+	# command, instead of copying a file around by hand:
+	#
+	#   curl -k https://labelbench.local/rootCA.pem -o rootCA.pem
+	#   openssl x509 -in rootCA.pem -noout -fingerprint -sha256
+	#   sudo cp rootCA.pem /usr/local/share/ca-certificates/labelbench-rootCA.crt
+	#   sudo update-ca-certificates
+	#
+	# Only the CA's public certificate is served. Its private key stays in
+	# ~/.local/share/mkcert/ on the server and is never copied here.
+	handle /rootCA.pem {
+		root * /certs
+		rewrite * /rootCA.pem
+		file_server
+	}
+
 	# Proxy the API to the LabelBench server.
 	handle /api/* {
 		reverse_proxy app:3000

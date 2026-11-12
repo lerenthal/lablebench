@@ -68,6 +68,17 @@ echo "==> Server certificate : $CERT_DIR/labelbench.pem"
 echo "==> Private key        : $CERT_DIR/labelbench-key.pem"
 echo "==> Root CA            : $CAROOT/rootCA.pem"
 echo
+
+# Publish the CA's public certificate next to the server cert so Caddy can
+# serve it. A new workstation then trusts the origin with one download
+# instead of an scp. The CA's PRIVATE key is never copied here.
+cp "$CAROOT/rootCA.pem" "$CERT_DIR/rootCA.pem"
+chmod 644 "$CERT_DIR/rootCA.pem"
+echo "==> Published CA       : $CERT_DIR/rootCA.pem  (served at https://<host>/rootCA.pem)"
+echo
+
+CA_FINGERPRINT="$(openssl x509 -in "$CAROOT/rootCA.pem" -noout -fingerprint -sha256 | cut -d= -f2)"
+
 echo "Next steps:"
 echo "  1. Trust the root CA on THIS machine (so the server and your browser agree):"
 echo "       sudo cp $CAROOT/rootCA.pem /usr/local/share/ca-certificates/labelbench-rootCA.crt"
@@ -78,8 +89,12 @@ echo "     /root, so mkcert creates a SECOND, different CA and installs that one
 echo "     instead — the workstation would then trust a CA that did not sign the"
 echo "     server certificate. Copying rootCA.pem directly avoids that entirely."
 echo
-echo "  2. Copy the root CA to every workstation that will open the app:"
-echo "       scp $CAROOT/rootCA.pem <workstation>:~"
-echo "     then import it there (see README, 'Trusting the CA on a workstation')."
-echo "  3. Start the stack:"
+echo "  2. Start the stack:"
 echo "       docker compose up -d --build"
+echo
+echo "  3. On every other workstation, fetch the CA and check it before trusting it:"
+echo "       curl -k https://$HOSTNAME_ARG/rootCA.pem -o rootCA.pem"
+echo "       openssl x509 -in rootCA.pem -noout -fingerprint -sha256"
+echo "       # must print: $CA_FINGERPRINT"
+echo "       sudo cp rootCA.pem /usr/local/share/ca-certificates/labelbench-rootCA.crt"
+echo "       sudo update-ca-certificates"
