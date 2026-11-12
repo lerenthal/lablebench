@@ -30,6 +30,7 @@
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import ObjectPicker from "$/components/dialogs/ObjectPicker.svelte";
   import PrintPreview from "$/components/dialogs/PrintPreview.svelte";
+  import QuickPrintGallery from "$/components/dialogs/QuickPrintGallery.svelte";
   import ArUcoParamsPanel from "$/components/designer-controls/ArUcoParamsControls.svelte";
   import QrCodeParamsPanel from "$/components/designer-controls/QRCodeParamsControls.svelte";
   import TextParamsControls from "$/components/designer-controls/TextParamsControls.svelte";
@@ -53,6 +54,7 @@
     | "saved_labels"
     | "csv_props"
     | "csv_batch"
+    | "quick_print"
     | "icon_picker"
     | "object_picker";
 
@@ -215,16 +217,45 @@
     return label;
   };
 
-  const onLoadRequested = (label: ExportedLabelTemplate) => {
+  const onLoadRequested = async (label: ExportedLabelTemplate) => {
     templateId = label.id;
     templateModel = label.model ?? "d11";
     templateVariables = label.variables ?? { variables: [], csv_mapping: {} };
     templateTags = label.tags ?? [];
 
-    loadLabelData(label).then(() => {
-      undo.push(fabricCanvas!, labelProps);
-      hasUnsavedChanges = false;
-    });
+    await loadLabelData(label);
+
+    undo.push(fabricCanvas!, labelProps);
+    hasUnsavedChanges = false;
+  };
+
+  /**
+   * Quick print (§5.5): load a template from the server and print it.
+   *
+   * The template is fetched from the central store, so the gallery is the
+   * same on every workstation — nothing is copied between them.
+   */
+  const onQuickPrint = async (id: string) => {
+    try {
+      const label = await templateStore.load(id);
+      await onLoadRequested(label);
+      printNow = true;
+      currentDialog = "preview";
+    } catch (e) {
+      Toasts.error(e);
+    }
+  };
+
+  /** A template that needs data: load it and open the CSV batch dialog. */
+  const onQuickBatch = async (id: string) => {
+    try {
+      const label = await templateStore.load(id);
+      await onLoadRequested(label);
+      refreshDeclaredVariables();
+      currentDialog = "csv_batch";
+    } catch (e) {
+      Toasts.error(e);
+    }
   };
 
   /**
@@ -628,6 +659,13 @@
 
         <button
           class="btn btn-sm btn-secondary"
+          title={$tr("templates.gallery")}
+          onclick={() => (currentDialog = "quick_print")}>
+          <MdIcon icon="bolt" />
+        </button>
+
+        <button
+          class="btn btn-sm btn-secondary"
           disabled={undoState.undoDisabled}
           onclick={() => undo.undo()}
           title={$tr("editor.undo")}>
@@ -793,6 +831,11 @@
       fabricJson={getCanvasForPreview()}
       {labelProps}
       onBindingChanged={onTemplateVariablesChanged} />
+  {:else if currentDialog === "quick_print"}
+    <QuickPrintGallery
+      onClose={() => (currentDialog = "none")}
+      onPrintTemplate={onQuickPrint}
+      onBatchTemplate={onQuickBatch} />
   {:else if currentDialog === "icon_picker"}
     <IconPicker onSubmit={onIconPicked} onSubmitSvg={onSvgIconPicked} onClose={() => (currentDialog = "none")} />
   {:else if currentDialog === "object_picker"}

@@ -233,6 +233,23 @@ sudo usermod -aG dialout "$USER"    # log out and back in for it to take effect
 
 ---
 
+## Quick printing a saved template
+
+The **template gallery** (the lightning bolt in the designer toolbar) lists every
+template on the central server as a card, with its thumbnail, target model and
+label size.
+
+- A template with **no variables** has a **Quick print** button. One click
+  loads it from the server and opens the print preview.
+- A template **with variables** has a **Needs data** button instead. One click
+  loads it and opens the CSV batch dialog with its variable bindings already
+  in place.
+
+The gallery reads from the server, so it is identical on every workstation —
+there is nothing to copy and nothing to install.
+
+---
+
 ## Designing a template
 
 1. Open the app and set the **label size** in millimetres (mm → px at 8 px/mm,
