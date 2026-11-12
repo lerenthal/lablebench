@@ -39,7 +39,11 @@ behaviour had to change, and each such edit is listed below.
 | `src/utils/label_render.ts` | The shared render pipeline (merge → mirror → render → 1-bit post-process), extracted so the manual preview and the CSV batch runner render identically. |
 | `src/utils/csv_batch.ts` | PapaParse import, column detection, auto-binding, serial auto-increment, variable resolution. |
 | `src/utils/batch_printer.ts` | Batch runner: per-row failure isolation, pause, cancel, copies per row, print-head width enforcement. |
+| `src/utils/print_limits.ts` | The print-head rules in one place: the model's head width from niimbluelib's own model table, and the block-vs-warn decision. Both the manual preview and the batch runner go through it. |
+| `src/services/device_grants.ts` | One-click reconnect. Lists the printers this machine is already allowed to use (`navigator.bluetooth.getDevices()`, `navigator.serial.getPorts()`) and remembers which was used last. |
 | `src/components/dialogs/CsvBatchControl.svelte` | The CSV batch dialog (§5.4). |
+| `src/components/dialogs/QuickPrintGallery.svelte` | The quick-print gallery (§5.5). |
+| `scripts/check-print-limits.mjs` | `npm run check-limits` — bundles the real width module with the project's esbuild and exercises the decision table. |
 
 ### Upstream files modified
 
@@ -50,9 +54,12 @@ behaviour had to change, and each such edit is listed below.
 | `src/utils/file_utils.ts` | Builds templates with the new fields. |
 | `src/components/dialogs/SavedLabelsMenu.svelte` | **Rewritten** against the server store. The seam swap required async call sites; the template list, save, replace, delete, load, import and export all go through `templateStore` now. |
 | `src/components/designer-controls/SavedLabelsBrowser.svelte` | The list payload changed from `ExportedLabelTemplate[]` to `TemplateListItem[]` — the browser only needs identity, title, thumbnail and label geometry, not the canvas document. |
-| `src/components/LabelDesigner.svelte` | Template state (model, variables, tags, id), the model selector, the CSV batch entry point, and the default template loaded from the server. |
+| `src/components/LabelDesigner.svelte` | Template state (model, variables, tags, id), the model selector, the CSV batch and quick-print entry points, and the default template loaded from the server. |
+| `src/components/PrinterConnector.svelte` | The Reconnect dropdown: connects to an already-granted device with no picker. |
+| `src/components/MainPage.svelte` | A key icon in the footer for the optional API key. |
+| `src/services/api.ts` | Sends `X-API-Key` when one is set, and reports a 401 as what it is. |
 | `src/locale/dicts/en.json` | New UI strings. Other locales fall back to English. |
-| `package.json` | Added `papaparse` + `@types/papaparse`. |
+| `package.json` | Added `papaparse` + `@types/papaparse`, `@types/w3c-web-serial`. |
 
 ### Re-exported upstream code
 

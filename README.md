@@ -166,7 +166,13 @@ The hostname should be one the LAN can resolve. Options, in order of preference:
    every platform. No per-machine DNS configuration at all.
 2. **A hosts-file entry** on each workstation pointing `labelbench.lab.local` at
    the server's IP.
-3. **A real DNS record**, if the lab has one.
+3. **The server's address directly** — `https://10.10.17.185/`. The certificate
+   carries the IP as a SAN and the server answers on both, so this works even
+   when the name does not resolve. A browser sends no SNI for an IP address,
+   which is why the Caddyfile gives the site a bare `:443` address: without it
+   the TLS handshake fails with "internal error" instead of choosing a
+   certificate.
+4. **A real DNS record**, if the lab has one.
 
 The certificate already carries every name you are likely to use
 (`labelbench.local`, `labelbench`, the machine's own mDNS name, the LAN IP,
@@ -197,6 +203,14 @@ The `-k` on the download is unavoidable — the workstation does not trust the
 CA yet, that is the whole point of the step. The fingerprint check is what
 makes it safe: it proves you fetched the CA you were meant to fetch. The
 fingerprint above is the one in this lab's CA.
+
+If the workstation cannot resolve `labelbench.local` (mDNS does not always
+cross switches), use the server's address instead — the certificate carries
+it as an IP SAN and the server answers on both:
+
+```bash
+curl -k https://10.10.17.185/rootCA.pem -o rootCA.pem
+```
 
 **Windows** (PowerShell, administrator)
 

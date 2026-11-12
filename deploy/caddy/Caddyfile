@@ -21,7 +21,24 @@
 
 # The label-design SPA and the API live behind the same origin, so the browser
 # sees a single trusted origin and one certificate.
-{$LABELBENCH_HOST:labelbench.local} {
+#
+# The site answers for BOTH the hostname and the server's LAN address, in one
+# site block on purpose:
+#
+#   - A workstation that cannot resolve the mDNS name across a switch can
+#     still reach the server by address. The certificate carries the IP as a
+#     SAN.
+#   - Two separate site blocks would leave Caddy with two candidates for a
+#     TLS handshake that carries no SNI, and it fails the handshake with
+#     "internal error" instead of choosing. One site with two addresses
+#     always has exactly one candidate, and the Host header still routes
+#     correctly.
+#
+# The bare `:443` address makes this site the catch-all for the port, so a
+# ClientHello with no SNI still gets a certificate. Chrome does not send SNI
+# for an IP address, and curl never does, so without this the IP path fails
+# the handshake outright.
+{$LABELBENCH_HOST:labelbench.local}, {$LABELBENCH_IP:10.10.17.185}, :443 {
 	encode zstd gzip
 
 	tls /certs/labelbench.pem /certs/labelbench-key.pem
@@ -67,6 +84,6 @@
 }
 
 # Plain HTTP exists only to redirect to HTTPS.
-http://{$LABELBENCH_HOST:labelbench.local} {
+http://{$LABELBENCH_HOST:labelbench.local}, http://{$LABELBENCH_IP:10.10.17.185} {
 	redir https://{host}{uri} permanent
 }
