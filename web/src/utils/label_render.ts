@@ -158,19 +158,6 @@ export async function renderLabelCanvas(
 /**
  * §5.1: the raster must never exceed the print head width.
  *
- * Returns the printable width of the canvas for the given orientation, and the
- * head width it was compared against (when known).
+ * The width rules live in `print_limits.ts`, which both the manual preview
+ * and the batch runner use, so the two paths cannot drift apart.
  */
-export function checkPrintWidth(
-  canvas: HTMLCanvasElement,
-  printDirection: "left" | "top",
-  headWidth: number | undefined,
-): { printWidth: number; headWidth: number | undefined; overflow: boolean } {
-  const printWidth = printDirection === "left" ? canvas.height : canvas.width;
-
-  return {
-    printWidth,
-    headWidth,
-    overflow: headWidth !== undefined && printWidth > headWidth,
-  };
-}

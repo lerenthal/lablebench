@@ -17,7 +17,8 @@
     printTasksCapabilities,
     PrintTaskCapability as TaskCap,
   } from "@mmote/niimbluelib";
-  import { type LabelProps, type PostProcessType, type FabricJson, type PreviewProps, previewPropsKeys } from "$/types";
+  import { type LabelProps, type PostProcessType, type FabricJson, type PreviewProps, type TemplateModel, previewPropsKeys } from "$/types";
+  import { evaluateWidth, headWidthForModel, printableWidth } from "$/utils/print_limits";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import { canvasPreprocess } from "$/utils/canvas_preprocess";
@@ -36,9 +37,11 @@
     printNow?: boolean;
     csvData: string;
     csvEnabled: boolean;
+    /** The model this template targets. Used to check the label against its own model's head. */
+    model?: TemplateModel;
   }
 
-  let { labelProps, canvasCallback, printNow = false, csvData, csvEnabled, onClose }: Props = $props();
+  let { labelProps, canvasCallback, printNow = false, csvData, csvEnabled, model, onClose }: Props = $props();
 
   let previewCanvas: HTMLCanvasElement;
   let printState = $state<"idle" | "printing">("idle");
@@ -56,6 +59,19 @@
   let currentPage = $state<number>(0);
   let pagesTotal = $state<number>(1);
   let warnings = $state<string[]>([]);
+  /**
+   * §5.1: the raster must never be wider than the print head.
+   *
+   * This is a hard device limit, not advice. Sending an over-wide raster
+   * would silently corrupt the label, so the print is **blocked** rather than
+   * warned about. The batch runner rejects such a row the same way.
+   */
+  let widthBlocked = $state<string>("");
+  /**
+   * The label is wider than the head of the model the template targets.
+   * A wider printer will still print it, so this warns rather than blocks.
+   */
+  let modelMismatch = $state<string>("");
   let currentPrintTask: AbstractPrintTask | undefined;
   let savedProps = $state<PreviewProps>({});
 
@@ -160,6 +176,13 @@
         currentPage = pageIdx;
         console.log("Printing page", currentPage);
         await generatePreviewData(currentPage);
+
+        // Never send an over-wide raster. The check runs per page, because
+        // the pages of a multi-page label can differ.
+        if (widthBlocked !== "") {
+          throw new Error(widthBlocked);
+        }
+
         const encoded: EncodedImage = ImageEncoder.encodeCanvas(
           previewCanvas,
           opts.pageColor!,
@@ -251,13 +274,16 @@
       headSize = $printerMeta.printheadPixels;
     }
 
-    if (headSize !== -1) {
-      const printWidth = labelProps.printDirection == "left" ? previewCanvas.height : previewCanvas.width;
+    // The device limit blocks the print; the model's limit warns, because a
+    // wider printer will still print it.
+    const evaluation = evaluateWidth(
+      printableWidth(previewCanvas, labelProps.printDirection),
+      headSize === -1 ? undefined : headSize,
+      headWidthForModel(model),
+    );
 
-      if (printWidth > headSize) {
-        warnings.push($tr("params.label.warning.width") + " " + `${printWidth} > ${headSize}`);
-      }
-    }
+    widthBlocked = evaluation.blocked === undefined ? "" : $tr("params.label.warning.width") + " " + evaluation.blocked;
+    modelMismatch = evaluation.warning === undefined ? "" : $tr("params.label.warning.model") + " " + evaluation.warning;
   };
 
   const toggleSavedProp = (key: string, value: any) => {
@@ -491,6 +517,21 @@
 
     {#if error}
       <div class="alert alert-danger" role="alert">{error}</div>
+    {/if}
+
+    {#if widthBlocked !== ""}
+      <div class="alert alert-danger" role="alert">
+        <MdIcon icon="block" />
+        {$tr("preview.print.blocked_detail")}
+        <strong>{widthBlocked}</strong>
+      </div>
+    {/if}
+
+    {#if modelMismatch !== ""}
+      <div class="alert alert-warning" role="alert">
+        <MdIcon icon="warning" />
+        <strong>{modelMismatch}</strong>
+      </div>
     {/if}
   </div>
 
@@ -917,9 +958,16 @@
       <MdIcon icon="print" />
     </button>
 
-    <button type="button" class="btn btn-primary" disabled={$disconnected || printState !== "idle"} onclick={onPrint}>
+    <button
+      type="button"
+      class="btn btn-primary"
+      disabled={$disconnected || printState !== "idle" || widthBlocked !== ""}
+      title={widthBlocked}
+      onclick={onPrint}>
       {#if $disconnected}
         {$tr("preview.not_connected")}
+      {:else if widthBlocked !== ""}
+        <MdIcon icon="block" /> {$tr("preview.print.blocked")}
       {:else}
         <MdIcon icon="print" /> {$tr("preview.print")}
       {/if}

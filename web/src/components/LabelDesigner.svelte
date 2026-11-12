@@ -768,6 +768,7 @@
       {labelProps}
       {printNow}
       {csvEnabled}
+      model={templateModel}
       csvData={$csvData.data} />
   {:else if currentDialog === "label_props"}
     <LabelPropsEditor onClose={() => (currentDialog = "none")} onChange={onUpdateLabelProps} {labelProps} />

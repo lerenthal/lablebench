@@ -305,5 +305,8 @@
     "connector.model": "Model",
     "connector.density_hint": "Some newer B21 firmware ignores the density command.",
     "model.d11": "D11 (96 px head)",
-    "model.b21": "B21 (384 px head)"
+    "model.b21": "B21 (384 px head)",
+    "preview.print.blocked": "Blocked",
+    "preview.print.blocked_detail": "Printing is blocked: the label is wider than the print head.",
+    "params.label.warning.model": "The label is wider than this template's printer model:"
 }

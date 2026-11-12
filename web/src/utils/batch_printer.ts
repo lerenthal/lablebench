@@ -25,7 +25,8 @@ import {
   type PrintProgressEvent,
   type PrintTaskName,
 } from "@mmote/niimbluelib";
-import { checkPrintWidth, renderLabelCanvas, type RenderParams } from "$/utils/label_render";
+import { renderLabelCanvas, type RenderParams } from "$/utils/label_render";
+import { evaluateWidth, printableWidth } from "$/utils/print_limits";
 import type { FabricJson, LabelProps } from "$/types";
 
 export type BatchRowStatus = "pending" | "printing" | "done" | "failed" | "skipped";
@@ -50,6 +51,8 @@ export type BatchPrinterOptions = {
   pageColor: PageColorType;
   /** Print head width in pixels. Rows wider than this are rejected, never sent. */
   headWidth?: number;
+  /** The head width of the model the template targets. Rows wider than this are flagged, not rejected. */
+  modelHeadWidth?: number;
 };
 
 export type BatchCallbacks = {
@@ -159,10 +162,15 @@ export async function runBatch(
 
         // §5.1: never send an over-wide raster. Reject the row with a clear
         // message instead of letting the printer receive something it cannot print.
-        const width = checkPrintWidth(canvas, options.labelProps.printDirection, options.headWidth);
-        if (width.overflow) {
+        const evaluation = evaluateWidth(
+          printableWidth(canvas, options.labelProps.printDirection),
+          options.headWidth,
+          options.modelHeadWidth,
+        );
+
+        if (evaluation.blocked !== undefined) {
           throw new Error(
-            `Label is ${width.printWidth} px wide but the ${options.printTaskName} print head is ${width.headWidth} px. ` +
+            `Label is ${evaluation.printWidth} px wide but the ${options.printTaskName} print head is ${options.headWidth} px. ` +
               `Reduce the label width or choose a template for this printer.`,
           );
         }

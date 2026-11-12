@@ -31,6 +31,7 @@
   } from "$/utils/batch_printer";
   import { DEFAULT_RENDER_PARAMS, renderLabelCanvas, type RenderParams } from "$/utils/label_render";
   import { extractVariablesFromJson } from "$/utils/canvas_preprocess";
+  import { headWidthForModel } from "$/utils/print_limits";
   import type {
     ExportedLabelTemplate,
     FabricJson,
@@ -282,6 +283,7 @@
           speed: 1,
           pageColor: PageColorType.SingleColor,
           headWidth: $printerInfo?.printheadWidth ?? $printerMeta?.printheadPixels,
+          modelHeadWidth: headWidthForModel(template.model),
         },
         states,
         {
@@ -343,7 +345,13 @@
   const printableWidth = $derived(
     rotation === "left" ? labelProps.size.height : labelProps.size.width,
   );
+  /** The device cannot print this width, so the rows are rejected. */
   const widthOverflow = $derived(headWidth !== undefined && printableWidth > headWidth);
+  /** The template's own model is narrower. A wider printer still prints it. */
+  const modelHeadWidth = $derived(headWidthForModel(template.model));
+  const modelWidthMismatch = $derived(
+    modelHeadWidth !== undefined && printableWidth > modelHeadWidth && !widthOverflow,
+  );
 </script>
 
 <AppModal title={$tr("batch.title")} {onClose} bind:this={modalRef} size="xl">
@@ -507,8 +515,16 @@
       </div>
 
       {#if widthOverflow}
-        <div class="alert alert-warning py-1 px-2 small">
+        <div class="alert alert-danger py-1 px-2 small">
+          <MdIcon icon="block" />
           {$tr("batch.width_warning")} ({printableWidth} px &gt; {headWidth} px)
+        </div>
+      {/if}
+
+      {#if modelWidthMismatch}
+        <div class="alert alert-warning py-1 px-2 small">
+          <MdIcon icon="warning" />
+          {$tr("params.label.warning.model")} ({printableWidth} px &gt; {modelHeadWidth} px)
         </div>
       {/if}
 
@@ -520,14 +536,14 @@
         <button
           class="btn btn-sm btn-primary"
           onclick={() => onPrint(false)}
-          disabled={running || disconnected || rows.length === 0}>
+          disabled={running || disconnected || rows.length === 0 || widthOverflow}>
           <MdIcon icon="print" />
           {$tr("batch.print_all")}
         </button>
         <button
           class="btn btn-sm btn-outline-secondary"
           onclick={() => onPrint(true)}
-          disabled={running || disconnected || selectedRow === -1}>
+          disabled={running || disconnected || selectedRow === -1 || widthOverflow}>
           {$tr("batch.print_selected")}
         </button>
         {#if running}
