@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "LabelBench central server — template/asset store for browser-direct NIIMBOT label printing",
+  "description": "LabelBench central server \u2014 template/asset store for browser-direct NIIMBOT label printing",
   "license": "MIT",
   "engines": {
     "node": ">=22"
@@ -13,7 +13,7 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --test --experimental-strip-types \"src/test/*.test.ts\""
+    "test": "tsx --test src/test/*.test.ts"
   },
   "dependencies": {
     "@fastify/multipart": "^9.0.3",

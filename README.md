@@ -336,10 +336,12 @@ Restore by putting both back into the `labelbench-data` volume.
 If you would rather not run Docker:
 
 ```bash
+# Build on the target machine, so the native module matches its Node.
 cd web && npm ci && npm run build
 cd ../app && npm ci && npm run build
 
 sudo install -d /opt/labelbench
+sudo install -d /var/lib/labelbench
 sudo cp -r app/dist /opt/labelbench/
 sudo cp -r web/dist /opt/labelbench/public
 sudo cp deploy/systemd/labelbench.service /etc/systemd/system/
@@ -350,6 +352,32 @@ sudo systemctl enable --now labelbench
 The unit serves the SPA and the API on `:3000` and expects TLS to be terminated
 in front of it. Point Caddy at `127.0.0.1:3000` with the same certificates, or
 put it behind the lab's existing TLS proxy.
+
+> **The `node_modules` must match the Node that runs the service.** The build
+> is plain `tsc`, so the compiled server imports `fastify`, `@fastify/static`
+> and `better-sqlite3` as bare specifiers — it needs `node_modules` present at
+> runtime, not just `dist/`. `better-sqlite3` is a native module whose
+> prebuilt binary is tied to one Node ABI, so build and run it with the same
+> interpreter:
+>
+> ```bash
+> cd app
+> node /path/to/npm/bin/npm-cli.js rebuild better-sqlite3
+> ```
+>
+> Run the service under the same Node you built with — `ExecStart` in the unit
+> points at `/usr/bin/node`; change it if yours lives elsewhere.
+
+### The systemd unit
+
+`deploy/systemd/labelbench.service` runs the app as an unprivileged
+`labelbench` user with `ProtectSystem=strict`, `PrivateTmp` and
+`NoNewPrivileges`. The only writable path is `/var/lib/labelbench`, which
+holds the SQLite file and the asset directory — the same two things the
+Docker deployment backs up.
+
+The unit references `LABELBENCH_AUTH_MODE` and `LABELBENCH_API_KEY` as
+commented-out lines. They work; see the API key section above.
 
 ---
 
@@ -367,6 +395,7 @@ npm ci
 npm run dev            # vite dev server
 npm run sv-check       # the typechecker contract — must be 0 errors
 npm run build
+npm run check-limits   # the print-head width rules
 ```
 
 The API test suite:
@@ -374,6 +403,10 @@ The API test suite:
 ```bash
 cd app && npm test
 ```
+
+> The test script runs through `tsx`, not Node's own type stripping. The app's
+> source uses the TypeScript ESM convention (`import ... from "./server.js"`
+> pointing at a `.ts` file), which only a loader like `tsx` can resolve.
 
 > **Pin the Node version when a native module is involved.** `better-sqlite3`
 > ships prebuilt binaries per Node ABI. If `npm rebuild` runs under a different

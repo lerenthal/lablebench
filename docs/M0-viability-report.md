@@ -75,7 +75,8 @@ Rotation is not a printer command. It is applied to the raster before encoding:
 print head is therefore the canvas **height** when the direction is "left", and
 the canvas **width** when it is "top".
 
-LabelBench's `checkPrintWidth()` implements exactly that mapping.
+LabelBench's `print_limits.ts` implements exactly that mapping, and both the
+manual preview and the batch runner go through it.
 
 ### Transports
 
@@ -128,19 +129,39 @@ The user account is already in the `dialout` group, so the browser can open
 | Template create / list / get / update / delete | ✅ |
 | Version snapshot + restore | ✅ (caught and fixed a real bug — see below) |
 | Asset upload + fetch | ✅ |
-| API test suite | ✅ 14/14 |
+| API test suite | ✅ **21/21** |
 | `tsc --noEmit` (server) | ✅ clean |
 | `svelte-check` (SPA) | ✅ 0 errors |
 | `vite build` (SPA) | ✅ built |
 | Server reachable on the LAN interface (`10.10.17.185:3000`) | ✅ |
 | mkcert CA created + server certificate issued | ✅ (no root needed) |
-| Docker Compose build (app + Caddy) | see §5 |
+| Docker Compose build (app + Caddy) | ✅ both containers up, app healthy |
+| HTTPS with a browser-trusted origin | ✅ `Verification: OK`, `Verify return code: 0` |
+| The SPA wired to the server store (no template in the browser) | ✅ verified in a real browser |
+| CSV batch: import → column detection → merge → preview | ✅ verified in a real browser |
+| One-click reconnect to an already-granted printer | ✅ verified in a real browser |
+| Print-head limit blocks an over-wide raster | ✅ `npm run check-limits`, 11 checks |
+| The API key gate rejects a missing/wrong key | ✅ 7 tests + live server |
+| Quick-print gallery (§5.5) | ✅ verified in a real browser |
 
-**Bug caught by the test suite:** a version restore replayed only the canvas, so
-a restored template could carry a stale `name` and `model` next to new artwork.
-Every column the restore path writes is now snapshotted. This is exactly the
-class of defect that passes field-level checks and only surfaces when someone
-restores a template.
+**Bugs caught by execution, not by reading the code:**
+
+- A version restore replayed only the canvas, so a restored template could
+  carry a stale `name` and `model` next to new artwork. Every column the
+  restore path writes is now snapshotted.
+- The SPA still wrote templates to `localStorage` after the server was live —
+  the module was imported and typechecked but never mounted. Found by driving
+  the app in a browser, not by the typechecker.
+- The CSV row preview drew into a canvas element that had not mounted yet, so
+  it rendered blank. It now renders the raster as an image.
+- "Save" inherited the open template's id and overwrote it; the list still
+  showed one item, so nothing looked wrong.
+- The API key gate did not gate. `isAuthorized()` was written and never
+  called, so `LABELBENCH_AUTH_MODE=apikey` left the API wide open while
+  looking like protection.
+
+These are exactly the class of defect that passes every static check. Each
+one was found by running the thing.
 
 ---
 
@@ -178,24 +199,41 @@ Requires the D11 on the **other** workstation, with Bluetooth enabled there.
 | `bluetooth` service on this machine | ⚠️ **inactive** — `sudo systemctl enable --now bluetooth` if the D11 is tested here |
 | User in `dialout` group (serial access) | ✅ |
 | Chrome on Linux may need `chrome://flags/#enable-experimental-web-platform-features` for Web Serial | try without it first; it is shipped by default in recent Chrome |
-| mDNS | ⚠️ avahi is running but resolves `yaniv-OptiPlex-7050.local` to a **docker bridge**, not the LAN IP — see §5 |
+| mDNS | ✅ `labelbench.local` → `10.10.17.185` (avahi restricted to the LAN interface) |
 
 ---
 
-## 5. Open — network and packaging
+## 5. Network and packaging — resolved
 
-- [ ] **mDNS conflict.** `yaniv-OptiPlex-7050.local` currently resolves to
-      `172.23.0.1`, a docker bridge, because avahi publishes every interface.
-      Fix: restrict avahi to the LAN interface —
-      `allow-interfaces=enp0s31f6` in `/etc/avahi/avahi-daemon.conf`, plus
-      `host-name=labelbench` to publish `labelbench.local` without renaming
-      the machine.
-- [ ] **Firewall** — allow inbound 443 (and 80 for the redirect) on the LAN
-      interface.
-- [ ] **Trusted origin** — trust the mkcert root CA on the server and on each
-      workstation.
-- [ ] **Docker Compose build** of the app + Caddy image.
+- [x] **mDNS conflict.** `yaniv-OptiPlex-7050.local` resolved to the docker
+      bridge `172.23.0.1` because avahi published every interface. Fixed by
+      restricting avahi to the LAN interface (`allow-interfaces=enp0s31f6`) and
+      publishing under `host-name=labelbench`, so `labelbench.local` resolves
+      to `10.10.17.185` without renaming the machine.
+- [x] **Firewall** — 80 and 443 are open to the LAN subnet `10.10.17.0/24`.
+- [x] **Trusted origin** — the mkcert root CA is installed in the system trust
+      store, and the server publishes it at `https://labelbench.local/rootCA.pem`
+      so a workstation fetches it with one command and checks its SHA-256
+      fingerprint before trusting it.
+- [x] **Docker Compose build** of the app + Caddy image; both containers up,
+      the app healthy, the origin verified.
 - [ ] **Two-workstation acceptance test** (§10 of the brief): two Chromium
       workstations open the central URL, connect the moved printer with one
       click, and print a manual label and a CSV batch — zero local install,
       zero template copying.
+
+### The one that bit
+
+`sudo mkcert -install` installs the **wrong** CA. Under `sudo`, `HOME` becomes
+`/root`, so mkcert looks in a different CAROOT, finds no CA, **creates a
+second one** and installs that instead. The workstation then trusts a CA that
+never signed the server certificate, and the browser still shows a warning.
+
+Install the CA by copying `rootCA.pem` directly:
+
+```bash
+sudo cp ~/.local/share/mkcert/rootCA.pem /usr/local/share/ca-certificates/labelbench-rootCA.crt
+sudo update-ca-certificates
+```
+
+`scripts/setup-certs.sh` and the README now print only this form.
