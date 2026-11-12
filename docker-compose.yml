@@ -46,9 +46,17 @@ services:
       # HTTPS origin or Web Bluetooth / Web Serial are unavailable.
       - "443:443"
       - "80:80"
+    # --watch makes Caddy reload itself when the Caddyfile changes.
+    #
+    # The whole deploy/caddy DIRECTORY is mounted, not the Caddyfile on its
+    # own. A bind mount of a single file pins the inode the container sees:
+    # an editor that replaces the file (write to a temp file, then rename)
+    # gives it a new inode, and the container keeps serving the old one
+    # until it is recreated. Mounting the directory means the container
+    # re-reads the directory entry and sees the replacement immediately.
+    command: ["caddy", "run", "--config", "/etc/caddy/lab/Caddyfile", "--adapter", "caddyfile", "--watch"]
     volumes:
-      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./deploy/caddy/certs:/certs:ro
+      - ./deploy/caddy:/etc/caddy/lab:ro
       - caddy-data:/data
       - caddy-config:/config
     networks:

@@ -7,8 +7,8 @@
 # browser-trusted HTTPS origin, navigator.bluetooth and navigator.serial are
 # unavailable and printing cannot work at all.
 #
-# This file is mounted read-only into the Caddy container; the certs are
-# mounted from deploy/caddy/certs.
+# This file is mounted read-only into the Caddy container, as part of the
+# deploy/caddy directory. The certs sit next to it in deploy/caddy/certs.
 
 {
 	# No email, no ACME — this is a fully offline LAN.
@@ -41,7 +41,7 @@
 {$LABELBENCH_HOST:labelbench.local}, {$LABELBENCH_IP:10.10.17.185}, :443 {
 	encode zstd gzip
 
-	tls /certs/labelbench.pem /certs/labelbench-key.pem
+	tls /etc/caddy/lab/certs/labelbench.pem /etc/caddy/lab/certs/labelbench-key.pem
 
 	header {
 		# The app is entirely local; nothing should be embedded cross-origin.
@@ -62,7 +62,7 @@
 	# Only the CA's public certificate is served. Its private key stays in
 	# ~/.local/share/mkcert/ on the server and is never copied here.
 	handle /rootCA.pem {
-		root * /certs
+		root * /etc/caddy/lab/certs
 		rewrite * /rootCA.pem
 		file_server
 	}

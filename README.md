@@ -241,6 +241,29 @@ warning. That matters beyond cosmetics: Web Bluetooth and Web Serial only
 exist in a browser-trusted secure context, so an untrusted certificate makes
 printing unavailable entirely.
 
+### Changing the TLS configuration
+
+Caddy runs with `--watch`, so editing `deploy/caddy/Caddyfile` and saving is
+enough — it reloads itself within a second or two. No restart, no dropped
+connections.
+
+```bash
+docker compose logs -f caddy     # watch it reload
+```
+
+Two things about the mount are deliberate and worth not undoing:
+
+- **The whole `deploy/caddy` directory is mounted, not the Caddyfile alone.**
+  A bind mount of a single file pins the inode the container sees. An editor
+  that replaces the file rather than rewriting it in place — write to a temp
+  file, then rename — gives it a new inode, and the container keeps serving
+  the old configuration with no error anywhere. Mounting the directory means
+  the container re-reads the directory entry and sees the replacement.
+- **The certificates sit next to the Caddyfile** in `deploy/caddy/certs/`, so
+  re-running `scripts/setup-certs.sh` is picked up by the same reload. The
+  private key is never served — only `rootCA.pem`, the CA's public
+  certificate, is reachable at `/rootCA.pem`.
+
 ---
 
 ## Adding the printer on a new workstation
