@@ -667,7 +667,20 @@ the naive copy was 4096 bytes and opening it raised
 passed `PRAGMA integrity_check`, and contained the templates and counters.
 
 Use SQLite's online backup API instead. It takes a consistent snapshot while
-the app keeps running — **no downtime**:
+the app keeps running — **no downtime**. The repository ships this as
+`scripts/backup.sh`:
+
+```bash
+cd /opt/labelbench
+./scripts/backup.sh                    # writes to ./backups
+./scripts/backup.sh /var/backups/labelbench   # or to a directory you name
+```
+
+It snapshots the database, archives the assets, opens the result and prints an
+integrity line. It refuses to run if the app is not up, and it is safe to run
+twice — the files are named with a UTC stamp.
+
+The script does exactly this, if you want to run it by hand:
 
 ```bash
 cd /opt/labelbench
@@ -731,6 +744,13 @@ sudo install -d -m 700 /var/backups/labelbench
 sudo cp -a /opt/labelbench/backups/labelbench-*.db \
            /opt/labelbench/backups/assets-*.tgz \
            /var/backups/labelbench/
+```
+
+Or skip the copy step and have the backup write straight there:
+
+```bash
+cd /opt/labelbench
+./scripts/backup.sh /var/backups/labelbench
 ```
 
 Then copy `/var/backups/labelbench/` to whatever the lab uses for off-site
