@@ -43,7 +43,6 @@ import { requestPrinters } from "@thermal-label/labelwriter-web";
 import {
   DEFAULT_MEDIA,
   MEDIA,
-  findMediaByDimensions,
   getPrintableCanvasDots,
   type LabelWriterMedia,
   type LabelWriterPrintOptions,
@@ -137,26 +136,87 @@ export const disconnectDymo = async (connection: DymoConnection): Promise<void> 
 };
 
 /**
- * The media that matches a label, in millimetres.
+ * How far a roll may be from the label and still be the right one.
  *
- * The app's label is W pixels along the roll and H pixels across the head
- * (with the print direction "left"), at 8 px/mm. The media registry stores
- * the media's nominal length, which includes the dead zone the printer
- * feeds through before the label starts — so the lookup adds that back.
+ * The registry's sizes are whole millimetres, and the dead zone in
+ * millimetres is not a whole number of dots — 71 dots at 300 dpi is
+ * 6.009 mm — so an exact comparison never matches anything at all. A roll
+ * a little off is still the right roll; one that is well off is not.
+ */
+export const MEDIA_MATCH_TOLERANCE_MM = 1.5;
+
+/**
+ * The roll a label is printed on.
+ *
+ * The label's long axis runs along the roll and its short axis across the
+ * head, and the registry declares a roll's whole length — the dead zone
+ * the printer feeds through before the label starts is part of it — so the
+ * label's printable length is compared with the roll's length less the
+ * dead zone.
+ *
+ * The registry is searched for the closest roll rather than for an exact
+ * one, and the closest is accepted only when it is close enough. A label
+ * that matches no roll is printed on continuous stock of the label's own
+ * length, which is what the printer can do with a roll that is not in the
+ * catalogue.
  */
 export const mediaForLabel = (
   canvasWidth: number,
   canvasHeight: number,
   leadingMm: number,
+  printDirection: "left" | "top" = "left",
 ): LabelWriterMedia => {
-  const alongRollMm = canvasWidth / CANVAS_DPMM;
-  const acrossHeadMm = canvasHeight / CANVAS_DPMM;
+  const alongRollMm =
+    (printDirection === "left" ? canvasWidth : canvasHeight) / CANVAS_DPMM;
+  const acrossHeadMm =
+    (printDirection === "left" ? canvasHeight : canvasWidth) / CANVAS_DPMM;
 
-  return (
-    findMediaByDimensions(acrossHeadMm, alongRollMm + leadingMm) ??
-    findMediaByDimensions(acrossHeadMm, alongRollMm) ??
-    DEFAULT_MEDIA
-  );
+  // The registry declares the roll's whole length, dead zone and all.
+  const wantedLength = alongRollMm + leadingMm;
+
+  let best: LabelWriterMedia | undefined;
+  let bestError = Number.POSITIVE_INFINITY;
+
+  for (const media of Object.values(MEDIA) as LabelWriterMedia[]) {
+    // The registry also holds the Duo tape cartridges, which are not labels.
+    if ((media as { type?: string }).type === "tape") {
+      continue;
+    }
+
+    const width = media.widthMm ?? 0;
+    const length = media.heightMm ?? 0;
+
+    if (width <= 0 || length <= 0) {
+      continue;
+    }
+
+    const error = Math.abs(width - acrossHeadMm) + Math.abs(length - wantedLength);
+
+    if (error < bestError) {
+      bestError = error;
+      best = media;
+    }
+  }
+
+  if (best !== undefined && bestError <= MEDIA_MATCH_TOLERANCE_MM) {
+    return best;
+  }
+
+  // No roll matches, so the label is printed on continuous stock of its own
+  // length. The pitch is the label's own length plus the dead zone, which
+  // is what the printer needs to cut where the label ends.
+  const lengthDots = Math.round(wantedLength * DYMO_DPMM);
+
+  return {
+    ...DEFAULT_MEDIA,
+    id: "continuous",
+    name: "Continuous",
+    type: "continuous",
+    widthMm: acrossHeadMm,
+    heightMm: wantedLength,
+    lengthDots,
+    defaultOrientation: "vertical",
+  };
 };
 
 /** The printable area of the head and the media, in dots. */
@@ -169,12 +229,29 @@ export interface DymoGeometry {
   leadingDots: number;
   /** The media the label was matched to. */
   media: LabelWriterMedia;
+  /** Which way the label is fed. */
+  printDirection: "left" | "top";
 }
 
 export interface DymoGeometryInput {
-  /** The label's canvas size in pixels. */
+  /**
+   * The label's canvas width, in the app's own pixels at 8 px/mm.
+   *
+   * The canvas is in the app's units, not the head's: a template is stored
+   * at 203 dpi whatever it is printed on, so the geometry is worked out from
+   * the template's size and the head's resolution is applied later.
+   */
   canvasWidth: number;
+  /** The label's canvas height, in the app's own pixels at 8 px/mm. */
   canvasHeight: number;
+  /**
+   * Which way the label is fed.
+   *
+   * "left" feeds the label's left edge first, so the canvas is turned a
+   * quarter turn and the canvas's height runs across the head. "top" feeds
+   * the top edge first and the canvas is printed as it is.
+   */
+  printDirection?: "left" | "top";
   /** The engine, which carries the head width and the dead zones. */
   engine?: Parameters<typeof getPrintableCanvasDots>[0];
 }
@@ -204,11 +281,19 @@ export const DEFAULT_DYMO_ENGINE: Parameters<typeof getPrintableCanvasDots>[0] =
 export const dymoGeometry = ({
   canvasWidth,
   canvasHeight,
+  printDirection = "left",
   engine,
 }: DymoGeometryInput): DymoGeometry => {
   const printable = getPrintableCanvasDots(engine ?? DEFAULT_DYMO_ENGINE);
   const leadingMm = printable.leadingDots / DYMO_DPMM;
-  const media = mediaForLabel(canvasWidth, canvasHeight, leadingMm);
+
+  // The label's long axis runs along the roll, and the print direction says
+  // which of the canvas's two dimensions that is. "left" turns the canvas a
+  // quarter turn, so the canvas's height runs across the head.
+  const alongPx = printDirection === "left" ? canvasWidth : canvasHeight;
+  const acrossPx = printDirection === "left" ? canvasHeight : canvasWidth;
+
+  const media = mediaForLabel(alongPx, acrossPx, leadingMm);
 
   return {
     headDots: printable.widthDots,
@@ -216,7 +301,23 @@ export const dymoGeometry = ({
       (media.lengthDots ?? 0) - printable.leadingDots - printable.trailingDots,
     leadingDots: printable.leadingDots,
     media,
+    printDirection,
   };
+};
+
+/**
+ * The factor the label is rendered at for a head.
+ *
+ * The template is in the app's pixels at 8 px/mm; a head that prints at
+ * 300 dpi needs the label drawn afresh at that resolution, so the text is
+ * rasterised at the resolution the head will burn rather than enlarged from
+ * a 203 dpi bitmap.
+ */
+export const dymoRenderScale = (
+  engine?: Parameters<typeof getPrintableCanvasDots>[0],
+): number => {
+  const dpi = engine?.dpi ?? DYMO_DPI;
+  return dpi / 25.4 / CANVAS_DPMM;
 };
 
 /**
@@ -283,10 +384,35 @@ export const dymoLabelPresets = (): LabelPreset[] => {
 };
 
 /**
+ * A copy of a canvas, turned a quarter turn clockwise.
+ *
+ * This is the same turn the NIIMBOT's encoder makes for a "left" print
+ * direction, so a label fed the same way comes out the same way on either
+ * printer.
+ */
+const rotateClockwise = (canvas: HTMLCanvasElement): HTMLCanvasElement => {
+  const out = document.createElement("canvas");
+  out.width = canvas.height;
+  out.height = canvas.width;
+
+  const ctx = out.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+
+  // Turning clockwise puts the source's left edge along the target's top.
+  ctx.translate(out.width, 0);
+  ctx.rotate(Math.PI / 2);
+  ctx.drawImage(canvas, 0, 0);
+
+  return out;
+};
+
+/**
  * Render the label into the bitmap the driver expects.
  *
- * The label is re-rendered at the head's own resolution rather than
- * enlarged, so the text is drawn afresh at 300 dpi.
+ * The canvas must already be at the head's own resolution — the label is
+ * re-rendered rather than enlarged, so the text is drawn afresh at 300 dpi.
+ * The bitmap's two dimensions are in the head's dots: the width is the head
+ * and the height is the printable length of the media.
  *
  * @param canvas    the label, already rendered and processed to 1 bit
  * @param geometry  the head and media geometry
@@ -307,20 +433,27 @@ export const composeDymoBitmap = (
   ctx.fillStyle = "white";
   ctx.fillRect(0, 0, width, height);
 
-  // The label's own pixels, at the head's resolution. It is clamped to the
-  // head, because a label that rounds up by a dot must lose that dot at the
-  // edge rather than run off it.
-  const scaled = Math.min(width, canvas.width * DOTS_PER_CANVAS_PX);
-  const scaledHeight = canvas.height * DOTS_PER_CANVAS_PX;
+  // A label fed by its left edge is turned a quarter turn, so that the
+  // canvas's height runs across the head.
+  const source =
+    geometry.printDirection === "left" ? rotateClockwise(canvas) : canvas;
 
-  // Across the head: a label narrower than the head sits in the middle of
-  // it, which is how a LabelWriter prints a small die-cut label.
-  const x = Math.max(0, Math.round((width - scaled) / 2));
+  // Both dimensions are clamped, because a label that rounds up by a dot
+  // must lose that dot at the edge rather than run off it. The roll's
+  // printable length and the head's width are both whole dots, while the
+  // label's size is whole millimetres, so the two disagree by a dot now
+  // and then.
+  const across = Math.min(width, source.width);
+  const along = Math.min(height, source.height);
+
+  // A label narrower than the head sits in the middle of it, which is how a
+  // LabelWriter prints a small die-cut label.
+  const x = Math.max(0, Math.round((width - across) / 2));
   // Along the roll: from the top of the printable area.
   const y = 0;
 
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(canvas, x, y, scaled, scaledHeight);
+  ctx.drawImage(source, x, y, across, along);
 
   const imageData = ctx.getImageData(0, 0, width, height);
   return { width, height, data: new Uint8Array(imageData.data.buffer) };
@@ -354,8 +487,15 @@ export const printDymoLabel = async (
   // The generic adapter's option type does not carry the LabelWriter's
   // labelLengthDots, but the LabelWriter implementation accepts it, and the
   // driver needs it: without it the form-feed pitch is wrong.
+  //
+  // The rotation is pinned as well. The driver turns a landscape bitmap a
+  // quarter turn when the roll says it is printed sideways, which is the
+  // right guess for a landscape label and the wrong one for a small one:
+  // the app has already turned the artwork the way it wants it, so the
+  // driver is told to leave it alone.
   const options = {
     labelLengthDots: geometry.media.lengthDots ?? 0,
+    rotate: 0,
   } as LabelWriterPrintOptions;
 
   await connection.printer.print(image, geometry.media, options);

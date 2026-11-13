@@ -100,12 +100,20 @@ export function applyPostProcess(image: ImageData, params: RenderParams): ImageD
  * @param labelProps the label geometry
  * @param variables  merged variable values (already resolved from the CSV row)
  * @param params     1-bit post-processing settings
+ * @param scale      how much to render the label up by
+ *
+ * The scale is for a head that does not print at the template's resolution.
+ * A LabelWriter burns 300 dpi and the template is in 203 dpi pixels, so the
+ * label is rendered afresh at the head's own resolution rather than enlarged
+ * from a smaller bitmap — the text is then rasterised at the resolution the
+ * head will burn, instead of being blown up.
  */
 export async function renderLabelCanvas(
   fabricJson: FabricJson,
   labelProps: LabelProps,
   variables: Record<string, string> | undefined,
   params: RenderParams,
+  scale = 1,
 ): Promise<HTMLCanvasElement> {
   const fabricCanvas = new CustomCanvas(undefined, {
     width: labelProps.size.width,
@@ -125,7 +133,7 @@ export async function renderLabelCanvas(
 
     fabricCanvas.requestRenderAll();
 
-    const preRendered = fabricCanvas.toCanvasElement();
+    const preRendered = fabricCanvas.toCanvasElement(scale);
     const ctx = preRendered.getContext("2d")!;
     const originalImage = ctx.getImageData(0, 0, preRendered.width, preRendered.height);
 

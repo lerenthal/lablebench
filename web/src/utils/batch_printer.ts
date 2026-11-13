@@ -26,6 +26,7 @@ import {
   type PrintTaskName,
 } from "@mmote/niimbluelib";
 import { renderLabelCanvas, type RenderParams } from "$/utils/label_render";
+import { printDymoLabel, type DymoConnection, type DymoGeometry } from "$/utils/dymo";
 import { allocateSerialValues } from "$/utils/dynamic_values";
 import type { SerialConfig } from "$/types";
 import { evaluateWidth, printableWidth } from "$/utils/print_limits";
@@ -41,16 +42,49 @@ export type BatchRowState = {
   error?: string;
 };
 
+/**
+ * Where a batch's labels go.
+ *
+ * The two printers are reached in entirely different ways — a NIIMBOT over
+ * Bluetooth or serial with a print task that takes a stream of pages, a
+ * LabelWriter over USB with a bitmap per label — so the transport is kept
+ * behind this and the runner itself stays the same for both. One runner
+ * means the serial allocation, the per-row error handling and the
+ * pause and cancel behaviour cannot differ between the printers.
+ */
+export interface BatchSink {
+  /** Prepare the printer for the batch. */
+  open: () => Promise<void>;
+  /**
+   * Print one label.
+   *
+   * @param canvas  the label, already rendered and processed to 1 bit
+   * @param copies  how many of this label to print
+   */
+  printLabel: (canvas: HTMLCanvasElement, copies: number) => Promise<void>;
+  /** Finish the batch and let the printer go. */
+  close: () => Promise<void>;
+  /**
+   * The printer's own progress, when the printer reports it.
+   *
+   * Returns the function that stops listening.
+   */
+  onProgress?: (callback: (percent: number) => void) => () => void;
+}
+
 export type BatchPrinterOptions = {
-  client: NiimbotAbstractClient;
+  /** Where the labels go. */
+  sink: BatchSink;
   fabricJson: FabricJson;
   labelProps: LabelProps;
   renderParams: RenderParams;
-  printTaskName: PrintTaskName;
-  density: number;
-  labelType: LabelType;
-  speed: 0 | 1;
-  pageColor: PageColorType;
+  /**
+   * How much to render the label up by.
+   *
+   * A LabelWriter burns 300 dpi and the template is in 203 dpi pixels, so
+   * the label is rendered afresh at the head's own resolution.
+   */
+  renderScale?: number;
   /** Print head width in pixels. Rows wider than this are rejected, never sent. */
   headWidth?: number;
   /** The head width of the model the template targets. Rows wider than this are flagged, not rejected. */
@@ -63,6 +97,126 @@ export type BatchPrinterOptions = {
    */
   serialConfig?: SerialConfig;
 };
+
+/** What a NIIMBOT batch needs to know about its printer. */
+export type NiimbotSinkOptions = {
+  client: NiimbotAbstractClient;
+  printTaskName: PrintTaskName;
+  density: number;
+  labelType: LabelType;
+  speed: 0 | 1;
+  pageColor: PageColorType;
+  printDirection: "left" | "top";
+  /** How many labels the batch will print in all. */
+  totalCopies: number;
+};
+
+/**
+ * A sink that prints to a NIIMBOT.
+ *
+ * The NIIMBOT's print task takes a whole page at a time and can print
+ * several copies of it in one go, which is why the copies are handed to the
+ * task rather than printed one by one.
+ */
+export const niimbotSink = (options: NiimbotSinkOptions): BatchSink => {
+  let printTask: AbstractPrintTask | undefined;
+
+  return {
+    open: async () => {
+      options.client.stopHeartbeat();
+
+      printTask = options.client.protocol.newPrintTask(options.printTaskName, {
+        totalPages: options.totalCopies,
+        density: options.density,
+        speed: options.speed,
+        labelType: options.labelType,
+        statusPollIntervalMs: 100,
+        statusTimeoutMs: 8_000,
+        pageColor: options.pageColor,
+      });
+
+      await printTask.printInit();
+    },
+
+    printLabel: async (canvas, copies) => {
+      if (printTask === undefined) {
+        throw new Error("The print task was never started");
+      }
+
+      const encoded: EncodedImage = ImageEncoder.encodeCanvas(
+        canvas,
+        options.pageColor,
+        options.printDirection,
+      );
+
+      await printTask.printPage(encoded, copies);
+      await printTask.waitForPageFinished();
+    },
+
+    close: async () => {
+      try {
+        await printTask?.waitForFinished();
+        await printTask?.printEnd();
+      } catch {
+        // The printer may already be gone; the batch result stands on its own.
+      }
+
+      options.client.startHeartbeat();
+    },
+
+    onProgress: (callback) => {
+      const printListener = (event: PrintProgressEvent) => {
+        const currentPageProgress = (event.pagePrintProgress + event.pageFeedProgress) / 2;
+        const percents = Math.min(
+          100,
+          Math.floor(((event.page + currentPageProgress / 100) / Math.max(1, options.totalCopies)) * 100),
+        );
+        callback(percents);
+      };
+
+      const sendListener = (event: PrintPacketProgressEvent) => {
+        callback(event.progress);
+      };
+
+      options.client.on("printprogress", printListener);
+      options.client.on("printpacketprogress", sendListener);
+
+      return () => {
+        options.client.off("printprogress", printListener);
+        options.client.off("printpacketprogress", sendListener);
+      };
+    },
+  };
+};
+
+/** What a LabelWriter batch needs to know about its printer. */
+export type DymoSinkOptions = {
+  connection: DymoConnection;
+  geometry: DymoGeometry;
+};
+
+/**
+ * A sink that prints to a DYMO LabelWriter.
+ *
+ * The LabelWriter takes one bitmap at a time and has no notion of several
+ * copies in a single command, so the copies are printed one after another.
+ */
+export const dymoSink = (options: DymoSinkOptions): BatchSink => ({
+  open: async () => {
+    // Nothing to prepare: the connection is already open and the media is
+    // known from the geometry.
+  },
+
+  printLabel: async (canvas, copies) => {
+    for (let copy = 0; copy < copies; copy++) {
+      await printDymoLabel(options.connection, canvas, options.geometry);
+    }
+  },
+
+  close: async () => {
+    // The connection is the browser's and is kept open between batches.
+  },
+});
 
 export type BatchCallbacks = {
   onRowUpdate?: (row: BatchRowState) => void;
@@ -114,40 +268,18 @@ export async function runBatch(
     callbacks.onRowUpdate?.({ ...row });
   };
 
-  const client = options.client;
+  const sink = options.sink;
 
-  const printListener = (event: PrintProgressEvent) => {
-    const currentPageProgress = (event.pagePrintProgress + event.pageFeedProgress) / 2;
-    const percents = Math.min(
-      100,
-      Math.floor(((event.page + currentPageProgress / 100) / Math.max(1, totalCopies)) * 100),
-    );
-    callbacks.onProgress?.(percents);
-  };
+  // The label is rendered at the head's own resolution when the head is not
+  // the template's resolution.
+  const scale = options.renderScale ?? 1;
 
-  const sendListener = (event: PrintPacketProgressEvent) => {
-    callbacks.onProgress?.(event.progress);
-  };
-
-  client.on("printprogress", printListener);
-  client.on("printpacketprogress", sendListener);
-
-  let printTask: AbstractPrintTask | undefined;
+  const stopListening = sink.onProgress?.((percent) => {
+    callbacks.onProgress?.(percent);
+  });
 
   try {
-    client.stopHeartbeat();
-
-    printTask = client.protocol.newPrintTask(options.printTaskName, {
-      totalPages: totalCopies,
-      density: options.density,
-      speed: options.speed,
-      labelType: options.labelType,
-      statusPollIntervalMs: 100,
-      statusTimeoutMs: 8_000,
-      pageColor: options.pageColor,
-    });
-
-    await printTask.printInit();
+    await sink.open();
 
     for (let index = 0; index < results.length; index++) {
       if (control?.isCancelled() === true) {
@@ -180,31 +312,29 @@ export async function runBatch(
             options.labelProps,
             variables,
             options.renderParams,
+            scale,
           );
 
           // §5.1: never send an over-wide raster. Reject the row with a clear
           // message instead of letting the printer receive something it cannot print.
+          //
+          // The raster is measured in the head's own dots, so it is put back
+          // into the app's canvas pixels before it is compared with a head
+          // width, which is always in those.
           const evaluation = evaluateWidth(
-            printableWidth(canvas, options.labelProps.printDirection),
+            printableWidth(canvas, options.labelProps.printDirection) / scale,
             options.headWidth,
             options.modelHeadWidth,
           );
 
           if (evaluation.blocked !== undefined) {
             throw new Error(
-              `Label is ${evaluation.printWidth} px wide but the ${options.printTaskName} print head is ${options.headWidth} px. ` +
+              `Label is ${evaluation.printWidth} px wide but the print head is ${options.headWidth} px. ` +
                 `Reduce the label width or choose a template for this printer.`,
             );
           }
 
-          const encoded: EncodedImage = ImageEncoder.encodeCanvas(
-            canvas,
-            options.pageColor,
-            options.labelProps.printDirection,
-          );
-
-          await printTask.printPage(encoded, serialConfig === undefined ? copies : 1);
-          await printTask.waitForPageFinished();
+          await sink.printLabel(canvas, serialConfig === undefined ? copies : 1);
         }
 
         printedCopies += copies;
@@ -216,7 +346,6 @@ export async function runBatch(
       }
     }
 
-    await printTask.waitForFinished();
   } catch (e) {
     if (e instanceof BatchCancelledError) {
       for (let index = 0; index < results.length; index++) {
@@ -238,18 +367,13 @@ export async function runBatch(
       throw e;
     }
   } finally {
-    client.off("printprogress", printListener);
-    client.off("printpacketprogress", sendListener);
+    stopListening?.();
 
     try {
-      if (printTask !== undefined) {
-        await printTask.printEnd();
-      }
+      await sink.close();
     } catch {
       // The printer may already be gone; the batch result stands on its own.
     }
-
-    client.startHeartbeat();
   }
 
   return results;

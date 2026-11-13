@@ -1,12 +1,12 @@
 # LabelBench
 
 A self-hosted label-design web app with **browser-direct** printing to NIIMBOT
-printers.
+and DYMO LabelWriter printers.
 
 One installation on a central lab server. Any Chromium browser on the LAN opens
-it, designs or opens shared label templates, and prints to a NIIMBOT printer
-**physically plugged into that same workstation** — over Web Bluetooth (D11) or
-Web Serial (B21/USB).
+it, designs or opens shared label templates, and prints to a printer
+**physically plugged into that same workstation** — over Web Bluetooth (D11),
+Web Serial (B21/USB) or WebUSB (DYMO LabelWriter 450).
 
 The printer moves. The templates do not: they live on the server, so every
 station sees the same library and nothing is copied between machines.
@@ -16,12 +16,14 @@ station sees the same library and nothing is copied between machines.
  ┌────────────────┐                      ┌─────────────┐               ┌────────────────┐
  │ Chromium       │  https://labelbench  │ SPA + REST  │               │ Chromium       │
  │  + Web Serial  │◄────────────────────►│ API         │               │  + Web Bluetooth│
- │  + Web Bluetooth│   (trusted origin)  │ SQLite      │               │                │
+ │  + Web Bluetooth│   (trusted origin)  │ SQLite      │               │  + WebUSB      │
+ │  + WebUSB      │                      │ assets/     │               │                │
  │                │                      │ assets/     │               │                │
  │  ┌──────────┐  │                      └─────────────┘               │  ┌──────────┐  │
  │  │ NIIMBOT  │  │                                                    │  │ NIIMBOT  │  │
- │  │ printer  │  │                      templates + assets             │  │ printer  │  │
- │  └──────────┘  │                        shared                      │  └──────────┘  │
+ │  │ or DYMO  │  │                      templates + assets             │  │ printer  │  │
+ │  │ printer  │  │                        shared                      │  └──────────┘  │
+ │  └──────────┘  │                                                    │                │
  └────────────────┘                                                    └────────────────┘
 ```
 
@@ -34,36 +36,56 @@ The server never touches a printer.
 - [What it does](#what-it-does)
 - [Requirements](#requirements)
 - [Install](#install)
+- [Production install](#production-install)
 - [Certificate setup](#certificate-setup)
 - [Trusting the CA on a workstation](#trusting-the-ca-on-a-workstation)
 - [Adding the printer on a new workstation](#adding-the-printer-on-a-new-workstation)
+- [Printing with a DYMO LabelWriter](#printing-with-a-dymo-labelwriter)
 - [Designing a template](#designing-a-template)
 - [Running a CSV batch](#running-a-csv-batch)
 - [Backup and restore](#backup-and-restore)
 - [Bare systemd deployment](#bare-systemd-deployment)
 - [Development](#development)
 - [Project layout](#project-layout)
+- [Further reading](#further-reading)
 
 ---
 
 ## What it does
 
-**Phase 1 (built):**
+**Built:**
 
 - Drag-and-drop label designer — text, barcode (20 1-D symbologies), QR, image,
-  rectangle, line, date/time insert
+  rectangle, line, circle
+- **Date & time** and **serial number** objects. A serial number comes from a
+  **central counter** on the server, so every workstation draws from one
+  sequence and no two labels can carry the same number
+- **A barcode or QR can follow another object.** Linked to a serial number, a
+  date or a text box, it is encoded from whatever that object holds when the
+  label is printed — so the bars and the text always carry the same number
 - Live **1-bit** print preview — the actual rendering that reaches the print head,
   not just the on-screen design
 - Central template library on the server, shared by every workstation, with tags,
   duplication and version history
 - **CSV batch printing** — import a CSV, bind its columns to the template's
   variables, preview the merged rows, then print them one after another with
-  progress, per-row success/failure, pause and cancel
+  progress, per-row success/failure, pause and cancel. **Runs on both printer
+  families**, including the DYMO LabelWriter
+- **Preflight check** — finds everything that would make a printed label wrong:
+  text that overflows, text too small to read, low contrast, an object off the
+  label, text hidden under another object, an empty text object, a variable
+  that was never filled in. Click a finding to select the object
+- **Copy and paste** for objects and for the text they carry, with keyboard
+  shortcuts
+- **Rotate an object a quarter turn**, to set it on its side
 - Quick-print gallery for templates with no variables
 - Per-job copies, density, 90° rotation and dithering mode
+- An in-app **Help** guide, nine topics, covering the workflow and every control
 
-**Not in Phase 1 (designed for, not built):** server-side printing, a database-app
-"print button" API, Dymo LabelWriter 450 support, non-Chromium browsers.
+**Not built (designed for):** server-side printing, a database-app "print button"
+API, user accounts and an audit trail, a record of what was printed. The last
+one is the most worth having next: the counter knows its last number, but
+nothing yet records that a label was ever printed.
 
 ---
 
@@ -77,8 +99,8 @@ Safari cannot do Web Bluetooth or Web Serial. No software is installed on a
 workstation; the only per-machine steps are trusting the CA once and granting
 the printer once.
 
-**Printers** — a NIIMBOT D11 (BLE, 96 px print head) or a B21 / B1 (USB CDC-ACM,
-384 px print head).
+**Printers** — a NIIMBOT D11 (BLE, 96 px print head), a B21 / B1 (USB CDC-ACM,
+384 px print head), or a DYMO LabelWriter 450 (USB, 672 dots at 300 dpi).
 
 ---
 
@@ -98,7 +120,10 @@ docker compose up -d --build
 `docker compose up` brings up:
 
 - **app** — the LabelBench API server (Fastify + SQLite) and the SPA
-- **caddy** — TLS termination on :443, proxying to the app
+- **caddy** — TLS termination, proxying to the app
+
+The quick install above is fine for a lab that already has Docker. For a clean
+production server see [Production install](#production-install).
 
 The whole data set is two things: `labelbench-data` (a Docker volume holding
 `labelbench.db` and `assets/`) and the Caddy volumes.
@@ -109,6 +134,37 @@ Check it:
 curl -k https://labelbench.local:8443/api/health
 # {"status":"ok","service":"labelbench-server",...}
 ```
+
+## Production install
+
+For a clean server, `deploy/prepare-host.sh` does the whole preparation: it
+installs Docker and the Compose plugin, creates the install directory, makes
+the internal CA, pins it inside the install directory so a rerun cannot
+silently create a second one, and installs the CA into the host's trust store.
+
+```bash
+sudo ./deploy/prepare-host.sh
+```
+
+It is idempotent: running it again keeps the same CA and the same certificate.
+
+Then:
+
+```bash
+sudo git clone <this repo> /opt/labelbench
+cd /opt/labelbench
+cp .env.example .env
+$EDITOR .env                # set LABELBENCH_HOST and LABELBENCH_IP
+docker compose up -d --build
+```
+
+The full guide — ports, firewall, CA trust on each workstation, the API key,
+backup and restore, upgrades and troubleshooting — is in
+**[docs/PRODUCTION-INSTALL.md](docs/PRODUCTION-INSTALL.md)**.
+
+> The container runs as uid 1000. A restored database has to be handed back to
+> it, or the app cannot write to it:
+> `sudo chown -R 1000:1000 /opt/labelbench/data`.
 
 ### Turning on an API key (optional)
 
@@ -378,17 +434,60 @@ The printer moves between machines. Each workstation pairs with it once; the
 grant is remembered by the browser per origin, so after that the printer
 reconnects in one click.
 
-1. Plug the printer into the workstation (USB for a B21/B1, or pair it over
-   Bluetooth for a D11).
+1. Plug the printer into the workstation (USB for a B21/B1 or a LabelWriter, or
+   pair it over Bluetooth for a D11).
 2. Open `https://labelbench.local:8443` in Chrome or Edge.
-3. Click **Connect printer** and choose the transport:
-   - **Web Bluetooth (USB)** — for a D11. Pick the device from the browser's
-     chooser.
-   - **Web Serial (USB)** — for a B21/B1. Pick the serial port from the browser's
-     chooser.
-4. The model is detected automatically (`D11`, `B21`, `B1`, …) and shown next to
-   the connection, along with battery and paper status where the printer reports it.
+3. Click **Connect printer**, choose the printer family in the app bar, then
+   press the connect button next to it:
+   - **Web Bluetooth** — for a D11. Pick the device from the browser's chooser.
+   - **Web Serial (USB)** — for a B21/B1. Pick the serial port from the
+     browser's chooser.
+   - **WebUSB (USB)** — for a DYMO LabelWriter. Pick the printer from the
+     browser's chooser.
+4. The model is detected automatically (`D11`, `B21`, `B1`, `LabelWriter 450`, …)
+   and shown next to the connection, along with battery and paper status where
+   the printer reports it.
 5. Print a test label from the template gallery.
+
+Once a printer has been granted, the connect button reconnects to it in one
+click without showing the browser's chooser again — the grant is remembered
+per origin.
+
+---
+
+## Printing with a DYMO LabelWriter
+
+The LabelWriter family is a **raster** printer: the host sends rows of dots,
+not a label language. It is reached over WebUSB through the open-source
+`thermal-label/labelwriter` driver (MIT). There is no vendor driver, no
+native helper and no cloud call.
+
+**The resolution difference.** The NIIMBOT prints at 203 dpi and the app's
+label canvas is in device pixels at 203 dpi, so a canvas pixel is a dot. The
+LabelWriter prints at 300 dpi, so one canvas pixel is worth 1.476 dots.
+
+That is not a reason to change the template format. A label stays in canvas
+pixels at 203 dpi; at print time it is **re-rendered** at the LabelWriter's own
+resolution rather than enlarged from a smaller bitmap, so the text is
+rasterised at the resolution the head will burn instead of being blown up.
+
+**The label sizes** come from the driver's own media registry, so a roll the
+driver knows about is a size the app offers. Set the model to **Dymo 450** in
+the designer to get them.
+
+**The dead zone.** The printer feeds through 6 mm at the start of the media
+before the label begins. The app takes that figure from the driver, subtracts it
+from the label size, and the printer is told the real feed length so the cut
+lands where it should.
+
+> The 6 mm figure and the media sizes come from the driver's registry. They are
+> right for the roll they describe, but they have not been checked against a
+> physical roll — see [docs/DYMO-support-assessment.md](docs/DYMO-support-assessment.md)
+> for what still needs a bench test.
+
+**Batch printing works the same as on a NIIMBOT.** The batch dialog says which
+printer it is going to, and a CSV batch, a serial sequence and a barcode that
+follows the serial all work the same way on either printer.
 
 On Linux, the user running the browser must be able to open the serial device:
 
@@ -463,6 +562,15 @@ document, the declared variables and references to any uploaded images or fonts.
 7. **Print batch**. Rows print one after another with a progress bar and a
    per-row status. A row that fails is recorded with its error and the batch
    continues; you can retry just the failed rows. Pause and cancel mid-run.
+
+The dialog says which printer the batch will go to, because the two printer
+families are reached differently and the batch follows whichever is connected.
+
+**With a serial sequence**, every copy is its own label and takes the next
+number from the central counter — a row with three copies prints three
+different numbers, not the same number three times. A barcode **linked** to
+that serial is encoded from the same number, so the bars and the text always
+agree.
 
 > A row whose label is wider than the connected printer's print head is
 > **rejected** with a clear message rather than sent to the printer.
@@ -595,14 +703,30 @@ LabelBench/
 │       └── utils/       render pipeline, CSV engine, batch runner
 ├── deploy/
 │   ├── caddy/           Caddyfile + certificates
-│   └── systemd/         bare-metal unit
-├── scripts/             setup-certs.sh
+│   ├── systemd/         bare-metal unit
+│   └── prepare-host.sh  the clean-server preparation script
+├── scripts/
+│   ├── setup-certs.sh   the internal CA
+│   └── backup.sh        an online-safe database and asset backup
 ├── docs/
-│   ├── AUDIT-niimblue.md    the fork-vs-rebuild decision
-│   └── M0-viability-report.md
+│   ├── AUDIT-niimblue.md           the fork-vs-rebuild decision
+│   ├── DYMO-support-assessment.md   the LabelWriter: what is built, what needs a bench test
+│   ├── M0-viability-report.md       the first feasibility findings
+│   └── PRODUCTION-INSTALL.md        the full production guide
 ├── tools/bin/           mkcert + caddy binaries (no root needed)
 └── docker-compose.yml
 ```
 
 **Design records live in `docs/`**, not only in chat — a future session inherits
 them instead of re-deriving the audit.
+
+---
+
+## Further reading
+
+| Document | What it covers |
+|---|---|
+| [docs/PRODUCTION-INSTALL.md](docs/PRODUCTION-INSTALL.md) | The full production guide: installation, CA trust, the API key, backup and restore, upgrades, troubleshooting |
+| [docs/DYMO-support-assessment.md](docs/DYMO-support-assessment.md) | The LabelWriter: the architecture, the media sizes, and what still needs a physical roll |
+| [docs/AUDIT-niimblue.md](docs/AUDIT-niimblue.md) | Why the app is built on niimblue rather than from scratch |
+| [docs/M0-viability-report.md](docs/M0-viability-report.md) | The first feasibility findings: API, TLS, browser support, print limits, persistence |

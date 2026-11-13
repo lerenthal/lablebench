@@ -337,7 +337,7 @@
   "batch.serial.suffix": "Suffix",
   "batch.serial.counter": "Counter",
   "editor.save_load": "Save / Load",
-  "main.tagline": "Label design for NIIMBOT printers",
+  "main.tagline": "Label design for NIIMBOT and DYMO printers",
   "main.standalone": "Desktop app",
   "main.language": "Language",
   "main.debug": "Debug",
@@ -436,5 +436,9 @@
   "object.nothing_to_paste": "Nothing to paste",
   "object.text_copied": "Text copied",
   "object.text_pasted": "Text pasted",
-  "object.cannot_paste_text": "This object cannot hold text"
+  "object.cannot_paste_text": "This object cannot hold text",
+  "batch.printer": "Printer",
+  "batch.printer.dymo": "LabelWriter",
+  "batch.printer.niim": "NIIMBOT",
+  "batch.printer.none": "No printer connected"
 }

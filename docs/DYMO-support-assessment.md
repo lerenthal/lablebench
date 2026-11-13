@@ -34,6 +34,23 @@ The LabelWriter path is implemented and deployed:
   and composes it into the bitmap the driver asks for: the full width of the
   print head, the printable length of the media, the label centred across
   the head.
+- **CSV batch printing on the LabelWriter.** The batch runner was written
+  against the NIIMBOT's print task, so the transport was pulled out behind a
+  sink and the LabelWriter got one of its own. The runner, the serial
+  allocation, the per-row error handling and the pause and cancel behaviour
+  are now shared, so the two printers cannot drift apart.
+- **A roll that is matched by tolerance rather than by equality.** The
+  registry's sizes are whole millimetres and the dead zone in millimetres is
+  not a whole number of dots — 71 dots at 300 dpi is 6.009 mm — so the
+  original exact comparison matched *nothing at all* and every label
+  silently fell back to the default roll. The closest roll is now accepted
+  when it is within 1.5 mm, and a label that matches no roll is printed on
+  continuous stock of its own length.
+- **The rotation pinned.** The driver turns a landscape bitmap a quarter
+  turn when the roll says it is printed sideways. That is the right guess
+  for a landscape label and the wrong one for a small one, so the app now
+  tells the driver to leave the artwork alone — the app has already turned
+  it the way it wants it.
 
 ### The resolution question, answered
 
@@ -50,19 +67,25 @@ and without changing a single stored template.
 
 ### What is not done, and what the bench test has to settle
 
-1. **The CSV batch runner still prints through the NIIMBOT path.** The
-   manual print path is the LabelWriter's; the batch runner is not yet
-   wired to it. A batch on a LabelWriter needs the same treatment the
-   manual path has had.
-2. **The geometry has never run against hardware.** Two numbers are
+1. **The geometry has never run against hardware.** Two numbers are
    derived from the driver's registry rather than measured: the 6 mm
    leading dead zone at the start of the media, and the fact that a label
    narrower than the head is centred across it. Both are in one place —
    `web/src/utils/dymo.ts` — so a correction is a one-line change. The
    first print is expected to be off by a few millimetres in the feed
    direction, and the test below says what to look at.
-3. **The 450 is listed as *expected*, not *verified*, by the driver.** The
+2. **The 450 is listed as *expected*, not *verified*, by the driver.** The
    bench test is what promotes it.
+3. **The batch path has never been run against hardware either.** It shares
+   the manual path's geometry, so the first batch print settles both — but
+   it does add the serial allocation and the per-row rendering to the
+   unknowns.
+
+> The geometry can be checked without a printer:
+> `cd web && node tools/check-dymo-geometry.mjs` prints the roll each label
+> size matches, the dots along the roll and across the head, and the
+> printable length the bitmap will be. It is the same arithmetic the app
+> runs, against the driver's own registry.
 
 ### The bench test
 
@@ -73,10 +96,15 @@ One session at the bench with the 450 plugged into a workstation:
 2. Connect the printer: **LabelWriter** in the app bar, then pick the device
    in the browser's USB dialog.
 3. Design something small — a batch number and a date, at a readable size.
+   Add a **serial number** object and link a barcode to it, so the bars and
+   the text are both exercised.
 4. **Print preview** first, to see the raster, then **Print** one copy.
 5. Look at the label: is it the right size, is it centred across the head,
    and is it the right distance from the leading edge? If it is offset along
    the roll, the dead zone in `dymo.ts` is the number to change.
+6. Then run a **batch**: two or three CSV rows with the serial switched on,
+   and check that every row carries its own number and that each barcode
+   matches the text beside it.
 
 The full path — the USB picker, the connection, the model, the sizes — is
 already in place, so the test is about the geometry, not about plumbing.

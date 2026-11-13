@@ -188,9 +188,13 @@
             throw new Error(widthBlocked);
           }
 
+          // The geometry is worked out from the template's own size, not
+          // from the preview: the preview is already scaled to the head's
+          // resolution, and the media lookup is in the template's units.
           const geometry = dymoGeometry({
-            canvasWidth: previewCanvas.width,
-            canvasHeight: previewCanvas.height,
+            canvasWidth: labelProps.size.width,
+            canvasHeight: labelProps.size.height,
+            printDirection: labelProps.printDirection,
             engine,
           });
 
@@ -210,8 +214,9 @@
           }
 
           const geometry = dymoGeometry({
-            canvasWidth: previewCanvas.width,
-            canvasHeight: previewCanvas.height,
+            canvasWidth: labelProps.size.width,
+            canvasHeight: labelProps.size.height,
+            printDirection: labelProps.printDirection,
             engine,
           });
 
