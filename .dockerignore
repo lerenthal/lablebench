@@ -1,0 +1,33 @@
+# The build context is the repository root, so this is the file Docker reads.
+# A .dockerignore inside web/ is not consulted for a root context.
+#
+# The context was 428 MB without this: the host's node_modules for two
+# projects, the staged binaries, the git history and the live database.
+
+# The image installs its own dependencies from the lockfiles. The host's
+# copy must not come along — it would overwrite the image's own install
+# with one built for a different platform.
+**/node_modules
+
+# Build output and caches.
+**/dist
+**/*.tsbuildinfo
+**/.vite
+
+# Runtime state: the SQLite database and the uploaded assets. They are not
+# source, and they must never reach the build context.
+data/
+backups/
+
+# Locally staged binaries — mkcert and caddy, fetched by the setup script.
+tools/bin/
+
+# The git history is not needed to build the image.
+.git
+
+# TLS material, in case it is ever left in the tree.
+deploy/caddy/certs/*.pem
+
+# The documentation and the design records are not part of the image.
+docs/
+*.md
