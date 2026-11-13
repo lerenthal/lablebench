@@ -3,6 +3,7 @@ import Barcode from "$/fabric-object/barcode";
 import QRCode from "$/fabric-object/qrcode";
 import { TextboxExt } from "$/fabric-object/textbox-ext";
 import { DATE_TIME_KEY, VARIABLE_TEMPLATE_RX, preprocessDateTime } from "$/utils/dynamic_values";
+import { findById, objectText } from "$/utils/linked_objects";
 
 type Variables = Record<string, string>;
 
@@ -71,6 +72,22 @@ export const canvasPreprocess = (canvas: fabric.Canvas, variables?: Variables): 
     }
 
     if (obj instanceof QRCode || obj instanceof Barcode) {
+      // A linked barcode is encoded from the object it follows, not from its
+      // own text. The source's *token* is what gets resolved: a serial
+      // number object's token is `{serial}`, and resolving it here is what
+      // puts the number that was just allocated into the bars.
+      const source = findById(canvas, obj.linkedObjectId);
+
+      if (source !== undefined) {
+        const sourceToken =
+          source instanceof TextboxExt && source.dynamicToken !== undefined
+            ? source.dynamicToken
+            : objectText(source);
+
+        obj.set({ text: preprocessString(sourceToken, processedVars) });
+        return;
+      }
+
       obj.set({
         text: preprocessString(obj.text ?? "", processedVars),
       });
@@ -91,8 +108,21 @@ export const extractVariables = (canvas: fabric.Canvas): string[] => {
   canvas.forEachObject((obj: fabric.FabricObject) => {
     let text: string | undefined;
 
-    if (obj instanceof fabric.IText || obj instanceof QRCode || obj instanceof Barcode) {
-      text = obj.text;
+    if (obj instanceof QRCode || obj instanceof Barcode) {
+      // A linked barcode carries the variables of the object it follows —
+      // that is where the serial number lives — not its own text.
+      const source = findById(canvas, obj.linkedObjectId);
+
+      if (source !== undefined) {
+        text =
+          source instanceof TextboxExt && source.dynamicToken !== undefined
+            ? source.dynamicToken
+            : objectText(source);
+      } else {
+        text = obj.text;
+      }
+    } else if (obj instanceof fabric.IText) {
+      text = obj instanceof TextboxExt && obj.dynamicToken !== undefined ? obj.dynamicToken : obj.text;
     }
 
     if (text === undefined) {
@@ -120,17 +150,33 @@ export const extractVariables = (canvas: fabric.Canvas): string[] => {
  */
 export const extractVariablesFromJson = (
   fabricJson: {
-    objects?: Array<{ text?: string; dynamicToken?: string }>;
+    objects?: Array<{ text?: string; dynamicToken?: string; id?: string; linkedObjectId?: string }>;
   },
   serialVariable?: string,
 ): string[] => {
   const found = new Set<string>();
+  const objects = fabricJson.objects ?? [];
 
-  for (const obj of fabricJson.objects ?? []) {
-    // A dynamic object stores the token it was resolved from; its `text` is the
-    // value it was resolved to, which would otherwise be scanned as if it were
-    // a placeholder.
-    const text = obj.dynamicToken ?? obj.text;
+  // A barcode that follows an object carries that object's variables, so
+  // the source has to be found in the document rather than read off the
+  // barcode.
+  const byId = new Map<string, (typeof objects)[number]>();
+
+  for (const obj of objects) {
+    if (typeof obj.id === "string") {
+      byId.set(obj.id, obj);
+    }
+  }
+
+  for (const obj of objects) {
+    let text: unknown = obj.dynamicToken ?? obj.text;
+
+    const linkedId = (obj as { linkedObjectId?: string }).linkedObjectId;
+
+    if (typeof linkedId === "string") {
+      const source = byId.get(linkedId);
+      text = source?.dynamicToken ?? source?.text;
+    }
 
     if (typeof text !== "string") {
       continue;

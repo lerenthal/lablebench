@@ -421,5 +421,10 @@
   "help.printers_body": "Two families of printer are supported. A NIIMBOT — the D11 or the B21 — is reached over Bluetooth or over a USB serial adapter, and is chosen in the app bar. A DYMO LabelWriter — the 450 — is reached over USB from the browser, and is chosen with the LabelWriter button in the app bar. Only one is connected at a time, and the app bar shows which. The printer has to be plugged into the workstation the browser is running on: the server never talks to a printer.",
   "help.batch_title": "Batch printing",
   "help.batch_body": "A batch prints one label per row of a CSV. The template declares its variables with {placeholders}; the CSV's columns are matched to them, and the mapping is saved with the template, so the same CSV works on every workstation. Every row can be previewed before anything is printed, and a row that fails is recorded with its reason while the rest of the batch carries on.",
-  "connector.connect": "Connect to the printer"
+  "connector.connect": "Connect to the printer",
+  "params.link.label": "Link to object",
+  "params.link.none": "Not linked",
+  "params.link.hint": "The barcode is encoded from the linked object, so it follows a serial number as the number changes.",
+  "params.rotate90": "Rotate 90°",
+  "params.rotate90.hint": "Turn the object a quarter turn, to set it on its side."
 }

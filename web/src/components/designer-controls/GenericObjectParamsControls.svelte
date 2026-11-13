@@ -24,6 +24,19 @@
     valueUpdated();
   };
 
+  /**
+   * Turn the object a quarter turn.
+   *
+   * Fabric rotates about the object's own centre, so the object stays where
+   * it was on the label and only its direction changes — which is what
+   * setting something on its side needs.
+   */
+  const rotate90 = () => {
+    selectedObject.rotate((selectedObject.angle ?? 0) + 90);
+    selectedObject.setCoords();
+    valueUpdated();
+  };
+
   const bringTo = (to: "top" | "bottom") => {
     if (to === "top") {
       selectedObject.canvas?.bringObjectToFront(selectedObject);
@@ -74,6 +87,9 @@
 </button>
 <button class="btn btn-sm btn-secondary" onclick={putToCenterH} title={$tr("params.generic.center.horizontal")}>
   <MdIcon icon="horizontal_distribute" />
+</button>
+<button class="btn btn-sm btn-secondary" onclick={rotate90} title={$tr("params.rotate90.hint")}>
+  <MdIcon icon="rotate_right" />
 </button>
 
 <ObjectPositionControls {selectedObject} {editRevision} />

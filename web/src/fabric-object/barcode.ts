@@ -47,10 +47,26 @@ interface UniqueBarcodeProps {
   printText: boolean;
   fontSize: number;
   fontFamily: string;
+  /**
+   * The id of the object this barcode follows.
+   *
+   * When it is set, the barcode is re-encoded from that object instead of
+   * from its own text, so it follows a serial number that changes on every
+   * label.
+   */
+  linkedObjectId?: string;
 }
 export interface BarcodeProps extends fabric.FabricObjectProps, UniqueBarcodeProps {}
 export interface SerializedBarcodeProps extends fabric.SerializedObjectProps, UniqueBarcodeProps {}
-const BARCODE_PROPS = ["text", "encoding", "printText", "fontSize", "fontFamily"] as const;
+const BARCODE_PROPS = [
+  "text",
+  "encoding",
+  "printText",
+  "fontSize",
+  "fontFamily",
+  "linkedObjectId",
+  "objectId",
+] as const;
 
 interface JsBarcodeEncoding {
   data: string;
@@ -105,6 +121,17 @@ export class Barcode<
    * @default "Noto Sans Variable"
    */
   declare fontFamily: string;
+  /**
+   * The id of the object this barcode follows, when it follows one.
+   * @type string
+   * @default undefined
+   */
+  declare linkedObjectId?: string;
+  /**
+   * The object's identity, assigned by the app when it is added.
+   * @type string
+   */
+  declare objectId?: string;
 
   private barcodeEncodings: JsBarcodeEncoding[] = [];
   private barcodeBarHeight: number = 0;

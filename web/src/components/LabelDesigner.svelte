@@ -42,6 +42,7 @@
     previewSerialValue,
     resolveDynamicObjects,
   } from "$/utils/dynamic_values";
+  import { ensureObjectId, syncLinkedObjects } from "$/utils/linked_objects";
   import { api } from "$/services/api";
   import type { SerialConfig } from "$/types";
   import { DEFAULT_LABEL_PROPS, GRID_SIZE, OBJECT_DEFAULTS } from "$/defaults";
@@ -341,6 +342,7 @@
 
     if (config === undefined) {
       resolveDynamicObjects(fabricCanvas!, undefined, {});
+      syncLinkedObjects(fabricCanvas!);
       fabricCanvas?.requestRenderAll();
       return;
     }
@@ -366,6 +368,11 @@
       config.variable,
       next === undefined ? {} : { [config.variable]: next },
     );
+
+    // A barcode that follows the serial number object has to be re-encoded
+    // from the number the counter just handed out, or it would still show
+    // the previous one.
+    syncLinkedObjects(fabricCanvas!);
     fabricCanvas?.requestRenderAll();
   };
 
@@ -622,13 +629,21 @@
       undo.push(fabricCanvas!, labelProps);
     });
 
-    fabricCanvas.on("object:added", (): void => {
+    fabricCanvas.on("object:added", (e): void => {
+      // Every object is given an identity as it is added, so a barcode can
+      // be pointed at it and the link survives a save.
+      ensureObjectId(e.target);
+
       hasUnsavedChanges = true;
     });
 
     fabricCanvas.on("text:changed", () => {
       hasUnsavedChanges = true;
       editRevision++;
+
+      // A text box that a barcode follows has just changed, so the barcode
+      // is encoded again from the new text.
+      syncLinkedObjects(fabricCanvas!);
     });
 
     fabricCanvas.on("object:removed", (): void => {

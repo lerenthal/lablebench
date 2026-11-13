@@ -2,6 +2,7 @@
   import { BARCODE_ENCODINGS, Barcode, type BarcodeEncoding } from "$/fabric-object/barcode";
   import { tr } from "$/utils/i18n";
   import MdIcon from "$/components/basic/MdIcon.svelte";
+  import LinkedObjectControl from "$/components/designer-controls/LinkedObjectControl.svelte";
 
   interface Props {
     selectedBarcode: Barcode;
@@ -54,9 +55,12 @@
     }} />
 </div>
 
+<LinkedObjectControl target={selectedBarcode} {editRevision} {valueUpdated} />
+
 <textarea
   class="barcode-content form-control"
   value={selectedBarcode.text}
+  disabled={selectedBarcode.linkedObjectId !== undefined}
   oninput={(e) => {
     selectedBarcode?.set("text", e.currentTarget.value);
     valueUpdated();

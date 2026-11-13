@@ -30,7 +30,15 @@ interface UniqueQRCodeProps {
 }
 export interface QRCodeProps extends fabric.FabricObjectProps, UniqueQRCodeProps {}
 export interface SerializedQRCodeProps extends fabric.SerializedObjectProps, UniqueQRCodeProps {}
-const QRCODE_PROPS = ["text", "ecl", "size", "mode", "qrVersion"] as const;
+const QRCODE_PROPS = [
+  "text",
+  "ecl",
+  "size",
+  "mode",
+  "qrVersion",
+  "linkedObjectId",
+  "objectId",
+] as const;
 
 export class QRCode<
     Props extends fabric.TOptions<QRCodeProps> = Partial<QRCodeProps>,
@@ -61,6 +69,17 @@ export class QRCode<
    * Version
    */
   declare qrVersion: QrVersion;
+  /**
+   * The id of the object this QR code follows, when it follows one.
+   * @type string
+   * @default undefined
+   */
+  declare linkedObjectId?: string;
+  /**
+   * The object's identity, assigned by the app when it is added.
+   * @type string
+   */
+  declare objectId?: string;
 
   constructor(options?: Props) {
     super();

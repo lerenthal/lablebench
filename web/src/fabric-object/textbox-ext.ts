@@ -14,7 +14,18 @@ interface UniqueTextboxExtProps {
   dynamicToken?: string;
 }
 
-const TEXTBOX_PROPS: Array<keyof UniqueTextboxExtProps> = ["fontAutoSize", "dynamicToken"];
+/**
+ * The text box's own properties, plus its identity.
+ *
+ * The identity is what a barcode follows, so it has to survive a save and a
+ * reload: without it in the template, the link would come apart the next
+ * time the template was opened.
+ */
+const TEXTBOX_PROPS: Array<keyof UniqueTextboxExtProps | "objectId"> = [
+  "fontAutoSize",
+  "dynamicToken",
+  "objectId",
+];
 
 const RTL_STRONG_CHAR_RE = /[\p{Script=Arabic}\p{Script=Hebrew}]/u;
 const LETTER_RE = /\p{Letter}/u;
@@ -47,6 +58,12 @@ export class TextboxExt<
 {
   declare fontAutoSize: boolean;
   declare dynamicToken?: string;
+  /**
+   * The object's identity. The app assigns one when the object is added to
+   * the canvas; a barcode follows the object by this.
+   * @type string
+   */
+  declare objectId?: string;
 
   /** True when the object renders a value that only exists at print time. */
   get isDynamic(): boolean {

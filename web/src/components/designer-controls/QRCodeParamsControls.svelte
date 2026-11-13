@@ -2,6 +2,7 @@
   import { QRCode } from "$/fabric-object/qrcode";
   import { tr } from "$/utils/i18n";
   import MdIcon from "$/components/basic/MdIcon.svelte";
+  import LinkedObjectControl from "$/components/designer-controls/LinkedObjectControl.svelte";
 
   interface Props {
     selectedQRCode: QRCode;
@@ -68,9 +69,12 @@
   </select>
 </div>
 
+<LinkedObjectControl target={selectedQRCode} {editRevision} {valueUpdated} />
+
 <textarea
   class="qrcode-content form-control"
   value={selectedQRCode.text}
+  disabled={selectedQRCode.linkedObjectId !== undefined}
   oninput={(e) => {
     selectedQRCode?.set("text", e.currentTarget.value);
     valueUpdated();
