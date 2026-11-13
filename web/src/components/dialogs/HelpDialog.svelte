@@ -27,7 +27,8 @@
     | "help.printers"
     | "help.printing"
     | "help.batch"
-    | "help.serial";
+    | "help.serial"
+    | "help.objects";
 
   const groups: { icon: MaterialIcon; key: HelpSectionKey }[] = [
     { icon: "select_all", key: "help.toolbar" },
@@ -39,6 +40,7 @@
     { icon: "print", key: "help.printing" },
     { icon: "dataset", key: "help.batch" },
     { icon: "pin", key: "help.serial" },
+    { icon: "category", key: "help.objects" },
   ];
 </script>
 
@@ -80,6 +82,17 @@
             <dd>{$tr("help.toolbar_data_desc")}</dd>
             <dt>{$tr("help.toolbar_output")}</dt>
             <dd>{$tr("help.toolbar_output_desc")}</dd>
+          </dl>
+        {/if}
+
+        {#if group.key === "help.objects"}
+          <dl class="help-list">
+            <dt>{$tr("help.objects_link")}</dt>
+            <dd>{$tr("help.objects_link_desc")}</dd>
+            <dt>{$tr("help.objects_rotate")}</dt>
+            <dd>{$tr("help.objects_rotate_desc")}</dd>
+            <dt>{$tr("help.objects_copy")}</dt>
+            <dd>{$tr("help.objects_copy_desc")}</dd>
           </dl>
         {/if}
       </section>

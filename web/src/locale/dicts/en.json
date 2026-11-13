@@ -440,5 +440,13 @@
   "batch.printer": "Printer",
   "batch.printer.dymo": "LabelWriter",
   "batch.printer.niim": "NIIMBOT",
-  "batch.printer.none": "No printer connected"
+  "batch.printer.none": "No printer connected",
+  "help.objects_title": "Objects",
+  "help.objects_body": "What you can do to an object once it is on the canvas.",
+  "help.objects_link": "Link to object",
+  "help.objects_link_desc": "A barcode or QR can follow another object — a serial number, a date, or a text box. It is then encoded from whatever that object holds when the label is printed, so the bars and the text always carry the same number.",
+  "help.objects_rotate": "Turn a quarter turn",
+  "help.objects_rotate_desc": "Turns the object a quarter turn about its own centre, so it stays where it is on the label and only its direction changes. Use it to set something on its side.",
+  "help.objects_copy": "Copy and paste",
+  "help.objects_copy_desc": "Ctrl+C copies the selected object and Ctrl+V pastes it a little to the side. Ctrl+Shift+C copies the text the object carries and Ctrl+Shift+V pastes text into it. The four buttons in the properties panel do the same."
 }
