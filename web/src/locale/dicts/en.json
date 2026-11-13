@@ -426,5 +426,15 @@
   "params.link.none": "Not linked",
   "params.link.hint": "The barcode is encoded from the linked object, so it follows a serial number as the number changes.",
   "params.rotate90": "Rotate 90°",
-  "params.rotate90.hint": "Turn the object a quarter turn, to set it on its side."
+  "params.rotate90.hint": "Turn the object a quarter turn, to set it on its side.",
+  "object.copy": "Copy",
+  "object.paste": "Paste",
+  "object.copy_text": "Copy text",
+  "object.paste_text": "Paste text",
+  "object.copied": "Copied",
+  "object.nothing_to_copy": "Nothing to copy",
+  "object.nothing_to_paste": "Nothing to paste",
+  "object.text_copied": "Text copied",
+  "object.text_pasted": "Text pasted",
+  "object.cannot_paste_text": "This object cannot hold text"
 }

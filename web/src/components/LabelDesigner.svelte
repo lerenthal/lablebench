@@ -24,6 +24,7 @@
   import { UndoRedo, type UndoState } from "$/utils/undo_redo";
   import BarcodeParamsPanel from "$/components/designer-controls/BarcodeParamsControls.svelte";
   import CsvControl from "$/components/dialogs/CsvControl.svelte";
+  import ClipboardControls from "$/components/designer-controls/ClipboardControls.svelte";
   import GenericObjectParamsControls from "$/components/designer-controls/GenericObjectParamsControls.svelte";
   import IconPicker from "$/components/dialogs/IconPicker.svelte";
   import LabelPropsEditor from "$/components/dialogs/LabelPropsEditor.svelte";
@@ -43,6 +44,7 @@
     resolveDynamicObjects,
   } from "$/utils/dynamic_values";
   import { ensureObjectId, syncLinkedObjects } from "$/utils/linked_objects";
+  import { clipboardKind, copyObject, copyObjectText, pasteObject, pasteText } from "$/utils/clipboard";
   import { api } from "$/services/api";
   import type { SerialConfig } from "$/types";
   import { DEFAULT_LABEL_PROPS, GRID_SIZE, OBJECT_DEFAULTS } from "$/defaults";
@@ -156,6 +158,48 @@
     if (key === "escape") {
       discardSelection();
       return;
+    }
+
+    // Ctrl + C, Ctrl + Shift + C
+    //
+    // Two things can be copied: the object, and the text it carries. They
+    // are wanted in different places — a duplicated shape is a new shape,
+    // while copied text is meant to go into a shape that already exists —
+    // so Shift tells them apart.
+    //
+    // This is handled before the canvas's own focus check, because a text
+    // object being edited holds a hidden field and the copy of the *object*
+    // is still what the user means. The browser's own copy is left alone in
+    // the properties panel, where the user is typing into a field.
+    if (cmdOrCtrl && key === "c") {
+      const field = e.target as HTMLElement | null;
+      const inField =
+        field !== null &&
+        (field.tagName === "INPUT" ||
+          field.tagName === "TEXTAREA" ||
+          field.isContentEditable);
+
+      if (!inField) {
+        if (e.shiftKey) {
+          if (copyObjectText(selectedObject)) {
+            e.preventDefault();
+            Toasts.message($tr("object.text_copied"));
+
+            // The clipboard lives outside the properties panel, so the panel
+            // has to be told that it changed — otherwise its Paste button
+            // stays greyed out until something else refreshes it.
+            editRevision++;
+          }
+          return;
+        }
+
+        if (copyObject(selectedObject)) {
+          e.preventDefault();
+          Toasts.message($tr("object.copied"));
+          editRevision++;
+        }
+        return;
+      }
     }
 
     if (LabelDesignerUtils.isAnyInputFocused(fabricCanvas!)) {
@@ -488,6 +532,31 @@
 
     const openedDropdowns = document.querySelectorAll(".dropdown-menu.show");
     if (openedDropdowns.length > 0) {
+      return;
+    }
+
+    // The app's own clipboard comes first: an object copied here is what the
+    // user means to paste, even when the system clipboard happens to hold an
+    // image.
+    const held = clipboardKind();
+
+    if (held === "object") {
+      event.preventDefault();
+
+      if (pasteObject(fabricCanvas!) !== undefined) {
+        controlValueUpdated();
+      }
+
+      return;
+    }
+
+    if (held === "text" && selectedObject !== undefined) {
+      event.preventDefault();
+
+      if (await pasteText(selectedObject)) {
+        controlValueUpdated();
+      }
+
       return;
     }
 
@@ -1099,6 +1168,7 @@
 
         {#if selectedObject && selectedCount === 1}
           <GenericObjectParamsControls {selectedObject} {editRevision} valueUpdated={controlValueUpdated} />
+          <ClipboardControls {selectedObject} {editRevision} valueUpdated={controlValueUpdated} />
         {/if}
 
         {#if selectedObject}
