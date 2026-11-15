@@ -22,3 +22,14 @@ SUBSYSTEM=="usb", ATTR{idVendor}=="0922", MODE="0660", GROUP="plugdev"
 
 # The vendor's other USB printers, so a second model needs no rule of its own.
 SUBSYSTEM=="usb", ATTR{idVendor}=="0922", ATTR{idProduct}=="1001", MODE="0660", GROUP="plugdev"
+
+# The browser has to claim the printer's interface itself, and the kernel's
+# printer driver (usblp) holds it. The browser will not detach a kernel
+# driver, so the interface is freed as the printer is plugged in.
+#
+# This runs for every USB interface; the script checks the vendor and does
+# nothing for anything else.
+#
+# CUPS is not affected: its USB backend talks to the device through libusb
+# and detaches the kernel driver itself.
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", RUN+="/usr/local/sbin/labelbench-unbind-usblp %k"

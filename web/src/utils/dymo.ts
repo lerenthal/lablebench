@@ -170,6 +170,27 @@ export const describeDymoError = (e: unknown): string => {
     return "The device picker was closed without choosing a printer.";
   }
 
+  // The kernel's printer driver holds the interface, and the browser will
+  // not detach a kernel driver.
+  if (message.includes("Unable to claim interface")) {
+    return (
+      "The LabelWriter was found, but the kernel's printer driver is holding it. " +
+      "The browser has to claim the interface itself, and it will not take it from " +
+      "the driver — so the driver has to let go of it.\n\n" +
+      "Free the interface:\n\n" +
+      "  for i in /sys/bus/usb/devices/*:*/; do\n" +
+      '    [ "$(cat "$i/../idVendor" 2>/dev/null)" = "0922" ] || continue\n' +
+      '    echo "$(basename "$i")" | sudo tee /sys/bus/usb/drivers/usblp/unbind\n' +
+      "  done\n\n" +
+      "To make it permanent, install the rule that does it on every plug-in:\n\n" +
+      "  sudo cp /home/yaniv/labelbench-unbind-usblp.sh /usr/local/sbin/\n" +
+      "  sudo chmod +x /usr/local/sbin/labelbench-unbind-usblp.sh\n" +
+      "  sudo cp /home/yaniv/60-labelbench-labelwriter.rules /etc/udev/rules.d/\n" +
+      "  sudo udevadm control --reload-rules\n\n" +
+      "Then unplug the printer and plug it back in."
+    );
+  }
+
   const isAccessDenied =
     message.includes("Access denied") ||
     (e instanceof DOMException && e.name === "SecurityError");
