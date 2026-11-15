@@ -86,7 +86,7 @@ The server never touches a printer.
   orientation and the design on it is scaled to the new label and centred on
   it. A label that is turned takes its content with it
 - **Template import** — a `.json` template file is opened in the designer,
-  ready to print, for either printer family
+  ready to print
 
 **Not built (designed for):** server-side printing, a database-app "print button"
 API, user accounts and an audit trail, a record of what was printed. The last
@@ -443,8 +443,8 @@ reconnects in one click.
 1. Plug the printer into the workstation (USB for a B21/B1, or pair it over
    Bluetooth for a D11).
 2. Open `https://labelbench.local:8443` in Chrome or Edge.
-3. Click **Connect printer**, choose the printer family in the app bar, then
-   press the connect button next to it:
+3. Click **Connect printer**, choose the transport in the app bar, then press
+   the connect button next to it:
    - **Web Bluetooth** — for a D11. Pick the device from the browser's chooser.
    - **Web Serial (USB)** — for a B21/B1. Pick the serial port from the
      browser's chooser.
@@ -477,7 +477,7 @@ are asked, and the app says which one is the printer and what model it is.
 
 **Batch printing.** The batch dialog says which printer it is going to, and a
 CSV batch, a serial sequence and a barcode that follows the serial all work
-the same way on either printer.
+the same way.
 
 On Linux, the user running the browser must be able to open the serial device:
 
@@ -556,8 +556,8 @@ document, the declared variables and references to any uploaded images or fonts.
    per-row status. A row that fails is recorded with its error and the batch
    continues; you can retry just the failed rows. Pause and cancel mid-run.
 
-The dialog says which printer the batch will go to, because the two printer
-families are reached differently and the batch follows whichever is connected.
+The dialog says which printer the batch will go to, because the batch follows
+whichever printer is connected.
 
 **With a serial sequence**, every copy is its own label and takes the next
 number from the central counter — a row with three copies prints three
