@@ -21,7 +21,7 @@
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { Toasts } from "$/utils/toasts";
   import { FileUtils } from "$/utils/file_utils";
-  import DpiSelector from "$/components/designer-controls/DpiSelector.svelte";
+  import { evaluateWidth } from "$/utils/print_limits";
   import { z } from "zod";
   import AppModal from "$/components/basic/AppModal.svelte";
   import { appConfirm } from "$/stores/confirm";
@@ -76,8 +76,18 @@
     }
 
     if (headSize > 0) {
-      if (printWidth > headSize) {
-        lines.push($tr("params.label.warning.width") + ` ${printWidth} > ${headSize}`);
+      // Compared in millimetres: the label's own resolution and the print
+      // head's are not the same thing. A 40 mm label drawn at 300 dpi is
+      // 472 px wide, and the head of a B21 is 384 px at 203 dpi — comparing
+      // those two directly would block a label that fits perfectly well.
+      const evaluation = evaluateWidth(
+        printWidth,
+        labelProps.dpmm,
+        headSize,
+        undefined,
+      );
+      if (evaluation.blocked !== undefined) {
+        lines.push($tr("params.label.warning.width") + ` ${evaluation.blocked}`);
       }
     }
 
@@ -127,6 +137,10 @@
         width: Math.floor(newWidth),
         height: Math.floor(newHeight),
       },
+      // Every NIIMBOT prints at 203 dpi — 8 px/mm. The label carries its
+      // resolution so its pixel size can never be read against the print
+      // head's pixels, which are at a different one.
+      dpmm: 8,
       shape,
       split,
       splitParts,
@@ -440,7 +454,6 @@
   </div>
 
   {#if unit !== "px"}
-    <DpiSelector bind:value={dpmm} />
   {/if}
 
   <div class="input-group flex-nowrap input-group-sm print-dir-switch mb-2" role="group">

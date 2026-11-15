@@ -64,6 +64,16 @@ export const densityRangeForModel = (
   return { min: meta.densityMin, max: meta.densityMax };
 };
 
+/**
+ * The resolution every NIIMBOT prints at: 203 dpi, 8 px per millimetre.
+ *
+ * The D11's head is 96 px wide and the B21's is 384 px, which is 12 mm and
+ * 48 mm of label respectively.
+ */
+export const NIIMBOT_DPMM = 8;
+
+const mm = (pixels: number, dpmm: number): number => Math.round((pixels / dpmm) * 10) / 10;
+
 export interface WidthEvaluation {
   /** The width the printer will actually lay down, in pixels. */
   printWidth: number;
@@ -76,12 +86,23 @@ export interface WidthEvaluation {
 /**
  * Decide what to do about a raster of a given width.
  *
+ * The comparison is made in millimetres, not in pixels. A pixel count only
+ * means something together with the resolution it was measured at, and the
+ * two sides of the comparison do not necessarily come from the same one:
+ * a label designed at 300 dpi is wider in pixels than the same label at
+ * 203 dpi, and the print head is always quoted at the printer's own
+ * resolution. Comparing the two directly blocks a 40 mm label on a B21
+ * because 40 mm at 300 dpi is 472 px and the head is 384 px at 203 dpi —
+ * a 40 mm label on a 48 mm head, which fits perfectly well.
+ *
  * @param printWidth      the raster width in the printer's print direction
+ * @param printDpmm       the resolution that raster was measured at
  * @param deviceHeadWidth the connected printer's print head width, if known
  * @param modelHeadWidth  the head width of the model the template targets
  */
 export const evaluateWidth = (
   printWidth: number,
+  printDpmm: number,
   deviceHeadWidth: number | undefined,
   modelHeadWidth: number | undefined,
 ): WidthEvaluation => {
@@ -91,13 +112,21 @@ export const evaluateWidth = (
     warning: undefined,
   };
 
-  if (deviceHeadWidth !== undefined && printWidth > deviceHeadWidth) {
-    evaluation.blocked = `${printWidth} > ${deviceHeadWidth}`;
-    return evaluation;
+  const labelMm = mm(printWidth, printDpmm || NIIMBOT_DPMM);
+
+  if (deviceHeadWidth !== undefined) {
+    const deviceMm = mm(deviceHeadWidth, NIIMBOT_DPMM);
+    if (labelMm > deviceMm) {
+      evaluation.blocked = `${labelMm} mm > ${deviceMm} mm`;
+      return evaluation;
+    }
   }
 
-  if (modelHeadWidth !== undefined && printWidth > modelHeadWidth) {
-    evaluation.warning = `${printWidth} > ${modelHeadWidth}`;
+  if (modelHeadWidth !== undefined) {
+    const modelMm = mm(modelHeadWidth, NIIMBOT_DPMM);
+    if (labelMm > modelMm) {
+      evaluation.warning = `${labelMm} mm > ${modelMm} mm`;
+    }
   }
 
   return evaluation;

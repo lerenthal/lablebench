@@ -33,12 +33,9 @@ export const configureFabric = () => {
 
 /** Default presets for LabelPropsEditor */
 export const DEFAULT_LABEL_PRESETS: LabelPreset[] = [
-  // 203dpi
+  // Every NIIMBOT prints at 203 dpi — 8 px/mm — so every label is.
   { width: 40, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect" },
   { width: 48, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect" },
-  // 300dpi
-  { width: 40, height: 12, unit: "mm", dpmm: 11.81, printDirection: "left", shape: "rect", title: "40x12mm 300dpi" },
-  { width: 48, height: 30, unit: "mm", dpmm: 11.81, printDirection: "top", shape: "rect", title: "48x30mm 300dpi" },
 ];
 
 /**
@@ -82,6 +79,8 @@ export const DEFAULT_LABEL_PROPS: LabelProps = {
     width: 240,
     height: 96,
   },
+  // Every NIIMBOT prints at 203 dpi — 8 px/mm.
+  dpmm: 8,
 };
 
 /** Object movement snapping */

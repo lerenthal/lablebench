@@ -25,10 +25,10 @@ import {
   type PrintProgressEvent,
   type PrintTaskName,
 } from "@mmote/niimbluelib";
-import { renderLabelCanvas, type RenderParams } from "$/utils/label_render";
+import { renderLabelCanvas, resampleToDpmm, type RenderParams } from "$/utils/label_render";
 import { allocateSerialValues } from "$/utils/dynamic_values";
 import type { SerialConfig } from "$/types";
-import { evaluateWidth, printableWidth } from "$/utils/print_limits";
+import { evaluateWidth, NIIMBOT_DPMM, printableWidth } from "$/utils/print_limits";
 import { logError, logInfo, logWarn } from "$/utils/app_log";
 import type { FabricJson, LabelProps } from "$/types";
 
@@ -267,11 +267,18 @@ export async function runBatch(
               ? row.variables
               : { ...row.variables, ...(await allocateSerialValues(serialConfig)) };
 
-          const canvas = await renderLabelCanvas(
-            options.fabricJson,
-            options.labelProps,
-            variables,
-            options.renderParams,
+          // The label may have been drawn at another resolution; the
+          // printer has one native resolution and expects the data in its
+          // dots, so the raster is brought back to it before it is sent.
+          const canvas = resampleToDpmm(
+            await renderLabelCanvas(
+              options.fabricJson,
+              options.labelProps,
+              variables,
+              options.renderParams,
+            ),
+            options.labelProps.dpmm,
+            NIIMBOT_DPMM,
           );
 
           // §5.1: never send an over-wide raster. Reject the row with a clear
@@ -282,6 +289,7 @@ export async function runBatch(
           // width, which is always in those.
           const evaluation = evaluateWidth(
             printableWidth(canvas, options.labelProps.printDirection),
+            NIIMBOT_DPMM,
             options.headWidth,
             options.modelHeadWidth,
           );

@@ -1,6 +1,7 @@
 <script lang="ts">
   import Dropdown from "bootstrap/js/dist/dropdown";
   import * as fabric from "fabric";
+  import { DEFAULT_DPMM } from "$/services/template_store";
   import { onDestroy, onMount, tick } from "svelte";
   import { ArUcoMarker } from "$/fabric-object/aruco";
   import { Barcode } from "$/fabric-object/barcode";
@@ -115,7 +116,11 @@
 
   const loadLabelData = async (data: ExportedLabelTemplate) => {
     undo.paused = true;
-    onUpdateLabelProps(data.label);
+    // The label's size is in pixels, so it has to arrive with the resolution
+    // it was measured at. Older templates were made at 300 dpi, when the app
+    // also drove a DYMO; the resolution is carried alongside the size so the
+    // two can never drift apart.
+    onUpdateLabelProps({ ...data.label, dpmm: data.dpmm ?? data.label.dpmm ?? DEFAULT_DPMM });
     if (data.csv) {
       $csvData = data.csv;
       csvEnabled = true;
@@ -284,6 +289,7 @@
 
     // Carry the LabelBench fields: the target printer model, the declared
     // variables and their CSV bindings, and the tags.
+    label.dpmm = labelProps.dpmm;
     label.model = templateModel;
     label.variables = templateVariables;
     label.tags = templateTags;

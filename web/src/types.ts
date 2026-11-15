@@ -112,6 +112,14 @@ export const LabelPropsSchema = z.object({
     width: z.number().positive(),
     height: z.number().positive(),
   }),
+  /**
+   * The resolution the size above is measured at.
+   *
+   * A width in pixels only means something together with the resolution it
+   * was measured at, so the label carries its own. Every NIIMBOT prints at
+   * 203 dpi — 8 px/mm — and that is the default.
+   */
+  dpmm: z.number().positive().default(8),
   shape: z.enum(["rect", "rounded_rect", "circle"]).default("rect").optional(),
   split: z.enum(["none", "vertical", "horizontal"]).default("none").optional(),
   splitParts: z.number().min(1).default(2).optional(),

@@ -472,5 +472,8 @@
   "log.filter.error": "Errors",
   "log.filter.warn": "Warnings",
   "log.filter.info": "Notes",
-  "log.fallback": "The clipboard was refused, so the log is here to be copied by hand:"
+  "log.fallback": "The clipboard was refused, so the log is here to be copied by hand:",
+  "connector.paper.loaded": "Loaded",
+  "connector.paper.gap": "gap",
+  "preview.paper.mismatch": "The loaded label is not the size of this template:"
 }
