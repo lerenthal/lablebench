@@ -101,6 +101,11 @@
       }
 
       logInfo("printer", `Connected over ${connectionType}`);
+
+      // The printer measures the media behind it, so it can say what label
+      // is loaded. Asking once at connect means the app knows the size of
+      // the stock without anybody having to go looking for it.
+      await readLoadedLabel();
     } catch (e) {
       connectionState.set("disconnected");
       logError("printer", `Could not connect over ${connectionType}`, e);
@@ -146,6 +151,8 @@
       }
 
       rememberDevice(device);
+
+      await readLoadedLabel();
     } catch (e) {
       connectionState.set("disconnected");
       Toasts.error(e);
@@ -180,6 +187,26 @@
     if (value >= 40) return "battery_3_bar";
     if (value >= 15) return "battery_2_bar";
     return "battery_0_bar";
+  };
+
+  /**
+   * Ask the printer what label is loaded in it.
+   *
+   * The NIIMBOT has a sensor behind the print head: it measures the width of
+   * the media and the height of the label on it, and reports both in
+   * millimetres. That is the one thing about the loaded stock the app cannot
+   * know for itself, and it is the thing that makes a label print in the
+   * wrong place.
+   *
+   * It is a question, not a requirement: a printer that does not answer
+   * leaves the app exactly as it was.
+   */
+  const readLoadedLabel = async () => {
+    try {
+      await $printerClient.fetchRfidInfo();
+    } catch (e) {
+      logWarn("printer", `The printer did not report the loaded label: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   const applyDimensionsClicked = () => {
@@ -429,6 +456,19 @@
       <MdIcon icon={batteryIcon($heartbeatData?.batteryPercents ?? $printerInfo?.batteryPercents ?? 0)} class="r-90"
       ></MdIcon>
     </span>
+
+    <!--
+      What the printer says is loaded in it. The NIIMBOT measures the media
+      behind the print head, so it knows the width of the roll and the height
+      of the label on it. It is right here rather than in a menu because it is
+      the thing that decides where the label lands on the page.
+    -->
+    {#if $rfidInfo.paperInfo?.paperWidth !== undefined}
+      <span class="input-group-text" title={$tr("connector.paper.loaded")}>
+        <MdIcon icon="sell" />
+        {$rfidInfo.paperInfo.paperWidth} × {$rfidInfo.paperInfo.paperHeight} mm
+      </span>
+    {/if}
   {:else}
     {#if featureSupport.webBluetooth}
       <button
