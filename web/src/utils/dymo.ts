@@ -164,6 +164,12 @@ export const connectDymoDevice = async (usbDevice: USBDevice): Promise<DymoConne
  */
 export const describeDymoError = (e: unknown): string => {
   const message = e instanceof Error ? e.message : String(e);
+
+  // The picker was closed without choosing anything.
+  if (message.includes("No device selected")) {
+    return "The device picker was closed without choosing a printer.";
+  }
+
   const isAccessDenied =
     message.includes("Access denied") ||
     (e instanceof DOMException && e.name === "SecurityError");
