@@ -86,6 +86,11 @@ The server never touches a printer.
 - An in-app **Help** guide, ten topics, covering the workflow and every control
 - A **preflight auto fix**: the check finds the objects that run off the
   label, and one button puts them back inside it
+- The **canvas follows the label**: change the size, the shape or the
+  orientation and the design on it is scaled to the new label and centred on
+  it. A label that is turned takes its content with it
+- **Template import** — a `.json` template file is opened in the designer,
+  ready to print, for either printer family
 
 **Not built (designed for):** server-side printing, a database-app "print button"
 API, user accounts and an audit trail, a record of what was printed. The last
@@ -506,6 +511,17 @@ it hits the refusal, with the commands to copy.
 a printer granted at `https://labelbench.local:8443` is not granted at
 `https://10.10.17.185:8443` — the two are different origins to the browser.
 Connect on the same address you print on.
+
+### Which port is the printer on?
+
+A NIIMBOT on USB is a serial port, and so are the machine's own `ttyS0` and
+`ttyS1` — the motherboard's RS-232 connectors — which the browser's port
+picker lists alongside it. Picking the wrong one gives an error that says
+nothing about which port was the right one.
+
+A printer answers the connection handshake, so it can be recognised. When a
+chosen port turns out not to have a printer on it, the other granted ports
+are asked, and the app says which one is the printer and what model it is.
 
 **The dead zone.** The printer feeds through 6 mm at the start of the media
 before the label begins. The app takes that figure from the driver, subtracts it

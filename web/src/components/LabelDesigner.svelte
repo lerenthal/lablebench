@@ -59,7 +59,7 @@
   import { extractVariablesFromJson } from "$/utils/canvas_preprocess";
   import CsvBatchControl from "$/components/dialogs/CsvBatchControl.svelte";
   import { runPreflight, type PreflightFinding } from "$/utils/preflight";
-  import { fitObjectsInsideLabel } from "$/utils/label_fit";
+  import { adaptContentToLabel, fitObjectsInsideLabel } from "$/utils/label_fit";
   import PreflightPanel from "$/components/dialogs/PreflightPanel.svelte";
   import AppModal from "$/components/basic/AppModal.svelte";
 
@@ -249,10 +249,23 @@
   };
 
   const onUpdateLabelProps = (newProps: LabelProps) => {
+    const oldSize = labelProps.size;
+    const sizeChanged =
+      oldSize.width !== newProps.size.width || oldSize.height !== newProps.size.height;
+
     labelProps = newProps;
     hasUnsavedChanges = true;
     fabricCanvas!.setDimensions(labelProps.size);
     fabricCanvas!.virtualZoom(fabricCanvas!.getVirtualZoom());
+
+    // The canvas has a new size, so the design on it is scaled to fit the
+    // new label and centred on it. A label that was turned takes its
+    // content with it.
+    if (sizeChanged && oldSize.width > 0 && oldSize.height > 0) {
+      adaptContentToLabel(fabricCanvas!.getObjects(), oldSize, newProps.size);
+      fabricCanvas!.requestRenderAll();
+      editRevision++;
+    }
     try {
       LocalStoragePersistence.saveLastLabelProps(labelProps);
       undo.push(fabricCanvas!, labelProps);

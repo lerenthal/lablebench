@@ -297,6 +297,14 @@
           ? $tr("params.saved_labels.import.added_one")
           : $tr("params.saved_labels.import.added_many").replace("{count}", String(saved)),
       );
+
+      // The imported template is opened, so it can be printed straight away
+      // rather than hunted for in the gallery.
+      if (items.length > 0) {
+        const { id: _ignored, ...rest } = items[0];
+        onLoadRequested(rest as ExportedLabelTemplate);
+        modalRef.hide();
+      }
     } catch (e) {
       if (e instanceof z.ZodError) {
         Toasts.zodErrors(e, "Label import error:");

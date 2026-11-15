@@ -462,5 +462,7 @@
   "help.objects_resize": "Resize by a corner",
   "help.objects_resize_desc": "A corner handle resizes the object and keeps its shape. On a barcode that matters: bars stretched sideways are bars that will not scan. The two buttons beside it make the object bigger or smaller about its own centre.",
   "help.preflight_fix": "Auto fix",
-  "help.preflight_fix_desc": "The check finds the objects that run off the label and will be clipped. This button moves them back inside it, and makes an object smaller when it is too big to fit at all."
+  "help.preflight_fix_desc": "The check finds the objects that run off the label and will be clipped. This button moves them back inside it, and makes an object smaller when it is too big to fit at all.",
+  "connector.serial.no_printer": "No printer answered on that port",
+  "connector.serial.identifying": "Looking for the printer on the granted ports…"
 }

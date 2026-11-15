@@ -26,6 +26,7 @@
     dimensionsUpdateRequest,
   } from "$/stores/app";
   import { connectDymo, connectDymoDevice, describeDymoError, disconnectDymo } from "$/utils/dymo";
+  import { describeWrongPort, identifySerialPorts } from "$/utils/serial_identify";
   import type { ConnectionType } from "$/types";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import MdIcon from "$/components/basic/MdIcon.svelte";
@@ -121,6 +122,21 @@
       }
     } catch (e) {
       connectionState.set("disconnected");
+
+      // A machine has serial ports of its own, so the wrong one can be
+      // picked. When that happens, the ports that were granted are asked
+      // which of them has a printer on it.
+      if (transport === "serial") {
+        const identities = await identifySerialPorts(await listGrantedDevices("serial"));
+        const hint = describeWrongPort(identities);
+
+        if (hint !== undefined) {
+          Toasts.error(`${e instanceof Error ? e.message : String(e)}\n\n${hint}`);
+          await refreshReconnectTargets();
+          return;
+        }
+      }
+
       Toasts.error(e);
     }
 
