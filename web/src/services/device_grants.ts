@@ -20,7 +20,7 @@
  * server — the same rule the default-template pointer follows.
  */
 
-export type GrantTransport = "bluetooth" | "serial";
+export type GrantTransport = "bluetooth" | "serial" | "usb";
 
 export interface GrantedDevice {
   /** Stable identity, used to match a remembered pointer back to a device. */
@@ -29,7 +29,7 @@ export interface GrantedDevice {
   name: string;
   transport: GrantTransport;
   /** The underlying browser object. Kept out of any serialised form. */
-  handle: BluetoothDevice | SerialPort;
+  handle: BluetoothDevice | SerialPort | USBDevice;
 }
 
 const LAST_DEVICE_KEY = "labelbench_last_device";
@@ -47,7 +47,11 @@ const readRemembered = (): RememberedDevice | undefined => {
       return undefined;
     }
     const parsed = JSON.parse(raw) as RememberedDevice;
-    if (parsed?.transport !== "bluetooth" && parsed?.transport !== "serial") {
+    if (
+      parsed?.transport !== "bluetooth" &&
+      parsed?.transport !== "serial" &&
+      parsed?.transport !== "usb"
+    ) {
       return undefined;
     }
     return parsed;
@@ -85,6 +89,28 @@ const serialKey = (port: SerialPort, index: number): string => {
 };
 
 /**
+ * A USB device's identity.
+ *
+ * The serial number is the only part that tells two identical printers apart,
+ * and not every device reports one, so the index stands in for it.
+ */
+const usbKey = (device: USBDevice, index: number): string => {
+  const vid = device.vendorId.toString(16).padStart(4, "0");
+  const pid = device.productId.toString(16).padStart(4, "0");
+  return `usb:${vid}:${pid}:${device.serialNumber ?? index}`;
+};
+
+const describeUsbDevice = (device: USBDevice, index: number): string => {
+  const vid = device.vendorId.toString(16).padStart(4, "0");
+  const pid = device.productId.toString(16).padStart(4, "0");
+  const name = device.productName;
+
+  return name !== undefined && name !== ""
+    ? `${name} (${vid}:${pid})`
+    : `USB device ${vid}:${pid}`;
+};
+
+/**
  * Every device this machine is already allowed to use.
  *
  * Returns an empty list when the transport is unavailable or the browser has
@@ -103,6 +129,25 @@ export const listGrantedDevices = async (transport: GrantTransport): Promise<Gra
       return devices.map((device) => ({
         key: `bt:${device.id}`,
         name: device.name ?? "Bluetooth device",
+        transport,
+        handle: device,
+      }));
+    }
+
+    if (transport === "usb") {
+      if (typeof navigator === "undefined" || navigator.usb === undefined) {
+        return [];
+      }
+
+      // The browser only hands back devices this origin has been granted.
+      // It cannot list devices it has not been granted — that is the point
+      // of the picker — so this is the list of printers already paired with
+      // this workstation, not a scan of the bus.
+      const devices = await navigator.usb.getDevices();
+
+      return devices.map((device, index) => ({
+        key: usbKey(device, index),
+        name: describeUsbDevice(device, index),
         transport,
         handle: device,
       }));

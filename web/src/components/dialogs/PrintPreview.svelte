@@ -37,7 +37,7 @@
     labelProps: LabelProps;
     canvasCallback: () => FabricJson;
     onClose?: () => void;
-    printNow?: boolean;
+
     csvData: string;
     csvEnabled: boolean;
     /** The model this template targets. Used to check the label against its own model's head. */
@@ -49,7 +49,7 @@
   let {
     labelProps,
     canvasCallback,
-    printNow = false,
+
     csvData,
     csvEnabled,
     model,
@@ -230,12 +230,22 @@
 
     printState = "idle";
 
-    if (printNow && !error) {
+    if (printRequested && !error) {
       modalRef.hide();
     }
   };
 
+  /**
+   * Whether the user asked for a print from this dialog.
+   *
+   * The dialog closes itself once such a print is done, and stays open after
+   * a print that was only a test.
+   */
+  let printRequested = $state<boolean>(false);
+
   const onPrint = async () => {
+    printRequested = true;
+
     if ($printerKind === "dymo") {
       await onPrintDymo();
       return;
@@ -344,7 +354,7 @@
     $printerClient.off("printpacketprogress", sendListener);
     $printerClient.startHeartbeat();
 
-    if (printNow && !error) {
+    if (printRequested && !error) {
       modalRef.hide();
     }
   };
@@ -633,10 +643,6 @@
     loadProps();
 
     await generatePreviewData(currentPage);
-
-    if (printNow && !$disconnected && printState === "idle") {
-      onPrint();
-    }
   });
 </script>
 

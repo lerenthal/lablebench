@@ -93,6 +93,8 @@
             <dd>{$tr("help.objects_rotate_desc")}</dd>
             <dt>{$tr("help.objects_copy")}</dt>
             <dd>{$tr("help.objects_copy_desc")}</dd>
+            <dt>{$tr("help.objects_resize")}</dt>
+            <dd>{$tr("help.objects_resize_desc")}</dd>
           </dl>
         {/if}
       </section>

@@ -25,7 +25,7 @@
     rfidInfo,
     dimensionsUpdateRequest,
   } from "$/stores/app";
-  import { connectDymo, disconnectDymo } from "$/utils/dymo";
+  import { connectDymo, connectDymoDevice, describeDymoError, disconnectDymo } from "$/utils/dymo";
   import type { ConnectionType } from "$/types";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import MdIcon from "$/components/basic/MdIcon.svelte";
@@ -72,9 +72,24 @@
     return undefined;
   };
 
+  /**
+   * The printers this machine is already allowed to use.
+   *
+   * The LabelWriter is a USB device, so it is listed whenever that family is
+   * selected — the browser's picker is the only way to get a grant, but a
+   * granted device comes back without it.
+   */
   const refreshReconnectTargets = async () => {
     const transport = transportFor(connectionType);
-    reconnectTargets = transport === undefined ? [] : await reconnectCandidates(transport);
+    const granted = transport === undefined ? [] : await reconnectCandidates(transport);
+
+    if (selectedFamily !== "dymo") {
+      reconnectTargets = granted;
+      return;
+    }
+
+    const usb = await reconnectCandidates("usb");
+    reconnectTargets = [...usb, ...granted.filter((device) => device.transport === "usb")];
   };
 
   const percentage = (cur?: number, total?: number) => {
@@ -119,6 +134,11 @@
    * re-asked — this is the "the printer moved here" path, in one click.
    */
   const onReconnectClicked = async (device: GrantedDevice) => {
+    if (device.transport === "usb") {
+      await onDymoDeviceClicked(device);
+      return;
+    }
+
     initClient(device.transport === "bluetooth" ? "bluetooth" : "serial");
     connectionState.set("connecting");
 
@@ -157,7 +177,30 @@
     } catch (e) {
       console.error(e);
       connectionState.set("disconnected");
-      Toasts.error(e);
+      Toasts.error(describeDymoError(e));
+    }
+  };
+
+  /**
+   * Connect to a LabelWriter the browser has already been granted.
+   *
+   * A printer that has been plugged into this workstation before needs no
+   * picker again, so it is offered as a one-click target.
+   */
+  const onDymoDeviceClicked = async (device: GrantedDevice) => {
+    connectionState.set("connecting");
+
+    try {
+      const connection = await connectDymoDevice(device.handle as USBDevice);
+      dymoConnection.set(connection);
+      printerKind.set("dymo");
+      connectedPrinterName.set(connection.model);
+      connectionState.set("connected");
+      rememberDevice(device);
+    } catch (e) {
+      console.error(e);
+      connectionState.set("disconnected");
+      Toasts.error(describeDymoError(e));
     }
   };
 
@@ -477,7 +520,10 @@
       <button
         disabled={$connectionState === "connecting"}
         class="btn text-nowrap {selectedFamily === 'dymo' ? 'btn-light' : 'btn-outline-secondary'}"
-        onclick={() => (selectedFamily = "dymo")}
+        onclick={() => {
+          selectedFamily = "dymo";
+          void refreshReconnectTargets();
+        }}
         title={$tr("connector.dymo.hint")}>
         <MdIcon icon="usb" />
         {$tr("connector.dymo")}

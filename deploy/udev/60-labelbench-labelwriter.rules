@@ -1,0 +1,24 @@
+# LabelWriter over WebUSB.
+#
+# The browser opens the device itself, so it needs write access to the
+# device node. A LabelWriter declares itself as a printer, so udev hands the
+# node to the printer group with mode 0664 — and a desktop user is usually
+# in lpadmin rather than lp, so the browser gets
+#
+#     SecurityError: Failed to execute 'open' on 'USBDevice': Access denied.
+#
+# plugdev is the group for hardware access, and its members are already the
+# people allowed to plug devices in. 0660 keeps the device out of reach of
+# everyone else.
+#
+# Install it with:
+#
+#     sudo cp deploy/udev/60-labelbench-labelwriter.rules /etc/udev/rules.d/
+#     sudo udevadm control --reload-rules
+#     sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0922
+#
+# Then unplug the printer and plug it back in.
+SUBSYSTEM=="usb", ATTR{idVendor}=="0922", MODE="0660", GROUP="plugdev"
+
+# The vendor's other USB printers, so a second model needs no rule of its own.
+SUBSYSTEM=="usb", ATTR{idVendor}=="0922", ATTR{idProduct}=="1001", MODE="0660", GROUP="plugdev"

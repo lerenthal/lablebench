@@ -37,6 +37,32 @@
     valueUpdated();
   };
 
+  /**
+   * Scale the object about its own centre, keeping its shape.
+   *
+   * Fabric scales about the object's origin rather than its centre, so the
+   * position is corrected afterwards — otherwise the object would drift away
+   * from where the user put it.
+   */
+  const scaleBy = (factor: number) => {
+    const before = selectedObject.getCenterPoint();
+
+    selectedObject.set({
+      scaleX: (selectedObject.scaleX ?? 1) * factor,
+      scaleY: (selectedObject.scaleY ?? 1) * factor,
+    });
+
+    const after = selectedObject.getCenterPoint();
+
+    selectedObject.set({
+      left: (selectedObject.left ?? 0) + (before.x - after.x),
+      top: (selectedObject.top ?? 0) + (before.y - after.y),
+    });
+
+    selectedObject.setCoords();
+    valueUpdated();
+  };
+
   const bringTo = (to: "top" | "bottom") => {
     if (to === "top") {
       selectedObject.canvas?.bringObjectToFront(selectedObject);
@@ -91,6 +117,23 @@
 <button class="btn btn-sm btn-secondary" onclick={rotate90} title={$tr("params.rotate90.hint")}>
   <MdIcon icon="rotate_right" />
 </button>
+
+<div class="btn-group btn-group-sm" title={$tr("params.scale.hint")}>
+  <button
+    type="button"
+    class="btn btn-secondary"
+    onclick={() => scaleBy(0.9)}
+    title={$tr("params.scale.smaller")}>
+    <MdIcon icon="remove" />
+  </button>
+  <button
+    type="button"
+    class="btn btn-secondary"
+    onclick={() => scaleBy(1.1)}
+    title={$tr("params.scale.bigger")}>
+    <MdIcon icon="add" />
+  </button>
+</div>
 
 <ObjectPositionControls {selectedObject} {editRevision} />
 

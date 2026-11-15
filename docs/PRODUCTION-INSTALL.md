@@ -612,6 +612,44 @@ Copying `rootCA.pem` directly avoids the problem entirely.
 
 ### The printer
 
+#### The DYMO LabelWriter on Linux
+
+A LabelWriter is reached over WebUSB: the browser opens the device itself.
+The browser's picker grants permission, but the operating system still has to
+let the browser open the device, and a LabelWriter declares itself as a
+printer — so udev hands its device node to the printer group. A browser
+running as a desktop user is usually in the printer *admin* group rather than
+the printer group, so the node is read-only for it and the connection fails
+with:
+
+```
+SecurityError: Failed to execute 'open' on 'USBDevice': Access denied.
+```
+
+Install the rule that gives the device to the hardware group:
+
+```bash
+sudo cp deploy/udev/60-labelbench-labelwriter.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0922
+```
+
+Then unplug the printer and plug it back in. Check it with:
+
+```bash
+ls -l /dev/bus/usb/*/* | grep 0922
+# crw-rw---- 1 root plugdev 189, 86 ... /dev/bus/usb/001/087
+```
+
+The group has to be `plugdev` and the mode has to give the group write
+access. The app says exactly this, with the commands to copy, when it hits
+the refusal.
+
+> The browser remembers the printer per **origin**. A printer granted at
+> `https://labelbench.local:8443` is not granted at `https://10.10.17.185:8443`
+> — to the browser they are different origins. Connect on the address you
+> print on.
+
 **The printer must be plugged into the workstation the browser runs on.** That
 is the design, not a limitation: the browser talks to the printer over USB or
 Bluetooth directly, and the server never touches a printer. Templates are

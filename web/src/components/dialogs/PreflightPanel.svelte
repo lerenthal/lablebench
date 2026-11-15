@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tr } from "$/utils/i18n";
   import { interpolate } from "$/utils/interpolate";
+  import MdIcon from "$/components/basic/MdIcon.svelte";
   import {
     summarizeFindings,
     type PreflightFinding,
@@ -12,10 +13,26 @@
     findings?: PreflightFinding[];
     onselect?: (id: number) => void;
     onclose?: () => void;
+    /**
+     * Put the objects that run off the label back inside it.
+     *
+     * Only offered when there is something to put back, so the button never
+     * appears for a check it cannot help with.
+     */
+    onfix?: () => void;
   }
 
-  let { findings = [], onselect = (id: number) => {}, onclose = () => {} }: Props =
-    $props();
+  let {
+    findings = [],
+    onselect = (id: number) => {},
+    onclose = () => {},
+    onfix = () => {},
+  }: Props = $props();
+
+  /** Whether anything runs off the label, which is what the fix addresses. */
+  const canFix = $derived(
+    findings.some((finding) => finding.code === "outside-label"),
+  );
 
   /** Errors first, then warnings, then info. */
   const severityOrder: PreflightSeverity[] = ["error", "warning", "info"];
@@ -116,6 +133,16 @@
   {/if}
 
   <footer class="preflight-footer">
+    {#if canFix}
+      <button
+        type="button"
+        class="btn btn-sm btn-outline-primary"
+        onclick={onfix}
+        title={$tr("preflight.auto_fix.hint")}>
+        <MdIcon icon="build" />
+        {$tr("preflight.auto_fix")}
+      </button>
+    {/if}
     <button type="button" class="preflight-done" onclick={onclose}>
       {$tr("preflight.close")}
     </button>

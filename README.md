@@ -78,9 +78,14 @@ The server never touches a printer.
 - **Copy and paste** for objects and for the text they carry, with keyboard
   shortcuts
 - **Rotate an object a quarter turn**, to set it on its side
+- **Resize an object by a corner**, keeping its shape — a barcode whose bars
+  are stretched is a barcode that will not scan — and a pair of buttons that
+  make an object bigger or smaller about its own centre
 - Quick-print gallery for templates with no variables
 - Per-job copies, density, 90° rotation and dithering mode
-- An in-app **Help** guide, nine topics, covering the workflow and every control
+- An in-app **Help** guide, ten topics, covering the workflow and every control
+- A **preflight auto fix**: the check finds the objects that run off the
+  label, and one button puts them back inside it
 
 **Not built (designed for):** server-side printing, a database-app "print button"
 API, user accounts and an audit trail, a record of what was printed. The last
@@ -475,6 +480,33 @@ rasterised at the resolution the head will burn instead of being blown up.
 driver knows about is a size the app offers. Set the model to **Dymo 450** in
 the designer to get them.
 
+**Linux needs one rule before the browser can open it.** The browser's USB
+picker grants permission, but the operating system still has to let the
+browser open the device. A LabelWriter declares itself as a printer, so udev
+hands its device node to the printer group — and a browser running as a
+desktop user is usually in the printer *admin* group rather than the printer
+group, so the node is read-only for it. The result is:
+
+```
+SecurityError: Failed to execute 'open' on 'USBDevice': Access denied.
+```
+
+The fix is a rule that gives the device to the hardware group:
+
+```bash
+sudo cp deploy/udev/60-labelbench-labelwriter.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0922
+```
+
+Then unplug the printer and plug it back in. The app says exactly this when
+it hits the refusal, with the commands to copy.
+
+**The grant is per origin.** The browser remembers the printer per origin, so
+a printer granted at `https://labelbench.local:8443` is not granted at
+`https://10.10.17.185:8443` — the two are different origins to the browser.
+Connect on the same address you print on.
+
 **The dead zone.** The printer feeds through 6 mm at the start of the media
 before the label begins. The app takes that figure from the driver, subtracts it
 from the label size, and the printer is told the real feed length so the cut
@@ -537,7 +569,10 @@ clusters: Label, Model, Edit, Add, Templates, Data and Output.
    object that runs off the label and will be clipped, text covered by
    another object, an empty text object, and a variable that was never filled
    in. Click a finding to select the offending object.
-7. Check **Print preview** — it shows the real 1-bit rendering.
+7. Press **Print**. It opens the preview, which shows the real 1-bit
+   rendering and holds the number of copies and the other settings. The print
+   starts when you approve it there, so nothing is printed that you have not
+   looked at.
 8. **Save** puts the template on the central server. Every workstation sees it
    immediately; there is nothing to copy.
 
@@ -704,6 +739,7 @@ LabelBench/
 ├── deploy/
 │   ├── caddy/           Caddyfile + certificates
 │   ├── systemd/         bare-metal unit
+│   ├── udev/            the rule that lets the browser open a LabelWriter
 │   └── prepare-host.sh  the clean-server preparation script
 ├── scripts/
 │   ├── setup-certs.sh   the internal CA

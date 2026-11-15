@@ -39,7 +39,7 @@
  * removed the leading dead zone.
  */
 
-import { requestPrinters } from "@thermal-label/labelwriter-web";
+import { fromUSBDeviceAll, requestPrinters } from "@thermal-label/labelwriter-web";
 import {
   DEFAULT_MEDIA,
   MEDIA,
@@ -124,6 +124,63 @@ export const connectDymo = async (): Promise<DymoConnection> => {
   const printer = printers[role];
 
   return { printer, model: printer.model || DYMO_450 };
+};
+
+/**
+ * Connect to a LabelWriter the browser has already been granted.
+ *
+ * The picker is the only way to get a grant, but a granted device can be
+ * reopened without it — which is what makes a one-click reconnect possible
+ * for a printer that has been plugged into this workstation before.
+ */
+export const connectDymoDevice = async (usbDevice: USBDevice): Promise<DymoConnection> => {
+  const adapters = await fromUSBDeviceAll(usbDevice);
+  const roles = Object.keys(adapters);
+
+  if (roles.length === 0) {
+    throw new Error("No LabelWriter found on that device");
+  }
+
+  // A LabelWriter Duo has two engines — the label side and the tape side.
+  // The label engine is the one that prints labels.
+  const role = roles.find((r) => r === "label") ?? roles[0];
+  const printer = adapters[role]!;
+
+  return { printer, model: printer.model || DYMO_450 };
+};
+
+/**
+ * What went wrong, said in a way that can be acted on.
+ *
+ * The browser's picker grants permission, but the operating system still has
+ * to let the browser open the device. When it does not, the browser says
+ * "Access denied" without saying why.
+ *
+ * A LabelWriter declares itself as a printer, so the operating system hands
+ * its device node to the printer group — and a browser running as a desktop
+ * user is usually in the printer *admin* group rather than the printer
+ * group, so the node is read-only for it. The fix is a rule that gives the
+ * device to the hardware group instead.
+ */
+export const describeDymoError = (e: unknown): string => {
+  const message = e instanceof Error ? e.message : String(e);
+  const isAccessDenied =
+    message.includes("Access denied") ||
+    (e instanceof DOMException && e.name === "SecurityError");
+
+  if (!isAccessDenied) {
+    return message;
+  }
+
+  return (
+    "The LabelWriter was found but the browser was not allowed to open it. " +
+    "On Linux the device belongs to the printer group, and the browser needs write access to it.\n\n" +
+    "Install this rule, then replug the printer:\n\n" +
+    '  echo \'SUBSYSTEM=="usb", ATTR{idVendor}=="0922", MODE="0660", GROUP="plugdev"\' ' +
+    "| sudo tee /etc/udev/rules.d/60-labelbench-labelwriter.rules\n" +
+    "  sudo udevadm control --reload-rules\n" +
+    "  sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0922"
+  );
 };
 
 /** Close the connection. */

@@ -141,11 +141,11 @@ export class Barcode<
     super();
     Object.assign(this, barcodeDefaultValues);
     this.setOptions(options);
+    // The corner handles are kept, because a corner scales the object
+    // proportionally — and a barcode whose bars are stretched is a barcode
+    // that will not scan. The side handles are kept too, because widening a
+    // barcode widens every bar in it, which is how the module size is set.
     this.setControlsVisibility({
-      tl: false,
-      tr: false,
-      bl: false,
-      br: false,
       ml: false,
       // mr: false,
       mtr: false,

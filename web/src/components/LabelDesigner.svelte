@@ -59,6 +59,7 @@
   import { extractVariablesFromJson } from "$/utils/canvas_preprocess";
   import CsvBatchControl from "$/components/dialogs/CsvBatchControl.svelte";
   import { runPreflight, type PreflightFinding } from "$/utils/preflight";
+  import { fitObjectsInsideLabel } from "$/utils/label_fit";
   import PreflightPanel from "$/components/dialogs/PreflightPanel.svelte";
   import AppModal from "$/components/basic/AppModal.svelte";
 
@@ -92,7 +93,6 @@
   let selectedObject = $state<fabric.FabricObject | undefined>(undefined);
   let selectedCount = $state<number>(0);
   let editRevision = $state<number>(0);
-  let printNow = $state<boolean>(false);
   let csvEnabled = $state<boolean>(false);
   /** What the next printed label would show for the serial variable. */
   let serialNextValue = $state<string | undefined>(undefined);
@@ -305,7 +305,6 @@
     try {
       const label = await templateStore.load(id);
       await onLoadRequested(label);
-      printNow = true;
       currentDialog = "preview";
     } catch (e) {
       Toasts.error(e);
@@ -490,14 +489,10 @@
   };
 
   const openPreview = () => {
-    printNow = false;
     currentDialog = "preview";
   };
 
-  const openPreviewAndPrint = () => {
-    printNow = true;
-    currentDialog = "preview";
-  };
+
 
   const controlValueUpdated = () => {
     if (selectedObject) {
@@ -780,7 +775,7 @@
           const unsubscribe = connectionState.subscribe((st) => {
             if (st === "connected") {
               tick().then(() => unsubscribe());
-              openPreviewAndPrint();
+              openPreview();
             }
           });
         }
@@ -814,7 +809,6 @@
 
   $effect(() => {
     if (currentDialog !== "preview") {
-      printNow = false;
     }
   });
 
@@ -864,6 +858,50 @@
       labelHeight: labelProps.size.height,
     });
     currentDialog = "preflight";
+  };
+
+  /**
+   * Put the objects that run off the label back inside it.
+   *
+   * Most of the time the object is simply in the wrong place, and moving it
+   * is enough. An object bigger than the label cannot be moved inside it, so
+   * it is made smaller instead, keeping its shape.
+   */
+  const onPreflightFix = () => {
+    if (!fabricCanvas) return;
+
+    const result = fitObjectsInsideLabel(
+      fabricCanvas.getObjects(),
+      labelProps.size.width,
+      labelProps.size.height,
+    );
+
+    if (result.moved === 0 && result.scaled === 0) {
+      Toasts.message($tr("preflight.fixed_none"));
+      return;
+    }
+
+    undo.push(fabricCanvas!, labelProps);
+    fabricCanvas!.requestRenderAll();
+    editRevision++;
+
+    const parts: string[] = [];
+
+    if (result.moved > 0) {
+      parts.push($tr("preflight.fixed_moved").replace("{count}", String(result.moved)));
+    }
+
+    if (result.scaled > 0) {
+      parts.push($tr("preflight.fixed_scaled").replace("{count}", String(result.scaled)));
+    }
+
+    Toasts.message(parts.join(". "));
+
+    // The check is run again, so the panel shows what is still wrong.
+    preflightFindings = runPreflight(fabricCanvas!, {
+      labelWidth: labelProps.size.width,
+      labelHeight: labelProps.size.height,
+    });
   };
 
   /**
@@ -1062,15 +1100,10 @@
               <MdIcon icon="fact_check" />
               {$tr("editor.preflight")}
             </button>
-            <button class="btn btn-sm btn-secondary" onclick={openPreview}>
-              <MdIcon icon="visibility" />
-              {$tr("editor.preview")}
-            </button>
             <button
-              title="Print with default or saved parameters"
+              title={$tr("editor.print.hint")}
               class="btn btn-sm btn-primary"
-              onclick={openPreviewAndPrint}
-              disabled={$connectionState !== "connected"}>
+              onclick={openPreview}>
               <MdIcon icon="print" />
               {$tr("editor.print")}
             </button>
@@ -1215,7 +1248,6 @@
       onClose={() => (currentDialog = "none")}
       canvasCallback={getCanvasForPreview}
       {labelProps}
-      {printNow}
       {csvEnabled}
       model={templateModel}
       serialConfig={templateVariables.serial}
@@ -1259,6 +1291,7 @@
       <PreflightPanel
         findings={preflightFindings}
         onselect={selectPreflightObject}
+        onfix={onPreflightFix}
         onclose={() => (currentDialog = "none")} />
     </AppModal>
   {:else if currentDialog === "object_picker"}
