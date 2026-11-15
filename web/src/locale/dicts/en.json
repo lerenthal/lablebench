@@ -472,5 +472,8 @@
   "log.filter.error": "Errors",
   "log.filter.warn": "Warnings",
   "log.filter.info": "Notes",
-  "log.fallback": "The clipboard was refused, so the log is here to be copied by hand:"
+  "log.fallback": "The clipboard was refused, so the log is here to be copied by hand:",
+  "editor.properties.empty": "Nothing is selected. Click an object on the label to change it.",
+  "main.status.connected": "Connected",
+  "main.status.disconnected": "Not connected"
 }

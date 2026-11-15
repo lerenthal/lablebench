@@ -1234,6 +1234,10 @@
           <VariableInsertControl {selectedObject} valueUpdated={controlValueUpdated} />
         {/if}
 
+        {#if selectedCount === 0}
+          <p class="props-panel__empty">{$tr("editor.properties.empty")}</p>
+        {/if}
+
         {#if selectedObject instanceof fabric.IText}
           <DynamicValueControls
             {selectedObject}
@@ -1442,7 +1446,7 @@
   /* The label sits on a workbench: a dotted, sunken surface, with the label
      itself on a sheet of paper that casts a shadow. */
   .stage__body {
-    align-items: flex-start;
+    align-items: center;
     background-color: var(--lb-surface-sunken);
     background-image: radial-gradient(var(--lb-border) 1px, transparent 1px);
     background-size: 16px 16px;
@@ -1499,5 +1503,123 @@
   .stage__paper canvas {
     display: block;
     image-rendering: pixelated;
+  }
+
+  /* --- the workspace ---------------------------------------------------------- */
+
+  /*
+   * Three columns: the tools on the left, the canvas in the middle, the
+   * properties of the selection on the right.
+   *
+   * The canvas is the thing being worked on, so it gets the room and the
+   * middle of the screen; everything else is a column beside it. The order
+   * of the rows in the markup is already tools, canvas, properties, so the
+   * grid places them without moving anything.
+   */
+  .image-editor {
+    align-items: start;
+    column-gap: var(--lb-space-3);
+    display: grid;
+    grid-template-columns: 13.5rem minmax(0, 1fr) 21rem;
+  }
+
+  .image-editor > .row {
+    margin-bottom: 0 !important;
+  }
+
+  /* Below the width where three columns fit, they stack instead. */
+  @media (max-width: 1200px) {
+    .image-editor {
+      grid-template-columns: 13.5rem minmax(0, 1fr);
+    }
+
+    .image-editor > .row:nth-child(3) {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .image-editor {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* --- the rail ---------------------------------------------------------------- */
+
+  .designer-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0;
+    padding: var(--lb-space-1);
+  }
+
+  .tool-group {
+    border-bottom: 1px solid var(--lb-border);
+    gap: var(--lb-space-1);
+    padding: var(--lb-space-2);
+  }
+
+  .tool-group:last-child {
+    border-bottom: none;
+  }
+
+  /* The output cluster is no longer at the right edge of a row, so it does
+     not need pushing away from the others. */
+  .tool-group--end {
+    margin-left: 0;
+  }
+
+  .tool-group__buttons {
+    flex-wrap: wrap;
+  }
+
+  /* --- the stage ---------------------------------------------------------------- */
+
+  .stage {
+    box-shadow: var(--lb-shadow-sm);
+  }
+
+  /*
+   * The zoom control sits over the canvas rather than in a bar above it:
+   * it belongs to the thing it changes, and the canvas is what the eye goes
+   * to.
+   */
+  /* The canvas is the hero: it takes the room the page has, and the label
+     sits in the middle of it. */
+  .stage__body {
+    min-height: 58vh;
+  }
+
+  .stage {
+    position: relative;
+  }
+
+  .stage__zoom {
+    background: var(--lb-surface);
+    border: 1px solid var(--lb-border);
+    border-radius: var(--lb-radius);
+    box-shadow: var(--lb-shadow);
+    left: var(--lb-space-3);
+    padding: var(--lb-space-1);
+    position: absolute;
+    top: 3.4rem;
+    z-index: 5;
+  }
+
+  /* The inspector says what to do when nothing is selected, rather than
+     being an empty box. */
+  .props-panel__empty {
+    color: var(--lb-text-faint);
+    font-size: var(--lb-text-sm);
+    margin: 0;
+    padding: var(--lb-space-3) 0;
+    width: 100%;
+  }
+
+  /* --- the inspector ------------------------------------------------------------ */
+
+  .props-panel {
+    box-shadow: var(--lb-shadow-sm);
   }
 </style>

@@ -12,6 +12,7 @@
   import LogDialog from "$/components/dialogs/LogDialog.svelte";
   import { appPrompt } from "$/stores/prompt";
   import { apiKeyStore } from "$/services/api";
+  import { connectionState, connectedPrinterName } from "$/stores/app";
 
   // eslint-disable-next-line no-undef
   const appCommit = __APP_COMMIT__;
@@ -92,6 +93,22 @@
   </div>
 
   <footer class="app-footer">
+    <!--
+      The status bar. What the app is connected to, and the state of it, on
+      every screen: the thing a person looks for first when something is
+      not printing.
+    -->
+    <div class="d-flex align-items-center gap-3">
+      <span class="app-status__link" class:app-status__link--on={$connectionState === "connected"}>
+        <span
+          class="app-status__dot"
+          class:app-status__dot--on={$connectionState === "connected"}></span>
+        {$connectionState === "connected"
+          ? $connectedPrinterName || $tr("main.status.connected")
+          : $tr("main.status.disconnected")}
+      </span>
+    </div>
+
     <div class="d-flex align-items-center gap-2">
       <select
         class="form-select form-select-sm w-auto"

@@ -1,0 +1,72 @@
+# The design preview.
+#
+# A second, separate deployment of the design branch, on its own ports and
+# with its own database, so the design can be reviewed without touching the
+# live app. The live stack keeps serving the app everybody uses; this one
+# serves the design.
+#
+#   docker compose -f docker-compose.preview.yml up -d --build
+#
+#   http://10.10.17.185:8083/   the preview
+#
+# It shares the certificate with the live deployment — the same internal CA
+# signs both — so the preview is a trusted origin and the browser APIs work
+# there exactly as they do in the live app.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    image: labelbench/app:preview
+    restart: unless-stopped
+    environment:
+      LABELBENCH_HOST: 0.0.0.0
+      LABELBENCH_PORT: 3000
+      LABELBENCH_DATA_DIR: /data
+      LABELBENCH_DB_PATH: /data/labelbench.db
+      LABELBENCH_ASSET_DIR: /data/assets
+      LABELBENCH_STATIC_DIR: /app/public
+      LABELBENCH_AUTH_MODE: ${LABELBENCH_AUTH_MODE:-none}
+      LABELBENCH_API_KEY: ${LABELBENCH_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - preview-data:/data
+    expose:
+      - "3000"
+    networks:
+      - preview
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      LABELBENCH_HOST: ${LABELBENCH_HOST:-labelbench.local}
+      LABELBENCH_IP: ${LABELBENCH_IP:-10.10.17.185}
+      LABELBENCH_HTTPS_PORT: ${PREVIEW_HTTPS_PORT:-8444}
+      LABELBENCH_HTTP_PORT: ${PREVIEW_HTTP_PORT:-8083}
+    ports:
+      - "${PREVIEW_HTTP_PORT:-8083}:80"
+      - "${PREVIEW_HTTPS_PORT:-8444}:443"
+    # The same command the live deployment uses: the Caddyfile lives in the
+    # mounted directory, not at the image's default path, and --watch lets it
+    # reload itself when the file changes.
+    command: ["caddy", "run", "--config", "/etc/caddy/lab/Caddyfile", "--adapter", "caddyfile", "--watch"]
+    volumes:
+      # The certificate lives in the live checkout, outside this worktree.
+      - /media/yaniv/1tb_WDC/hermes_agent_projects/LabelBench/deploy/caddy:/etc/caddy/lab:ro
+      - preview-caddy-data:/data
+      - preview-caddy-config:/config
+    networks:
+      - preview
+
+networks:
+  preview:
+
+volumes:
+  preview-data:
+  preview-caddy-data:
+  preview-caddy-config:
