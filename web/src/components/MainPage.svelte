@@ -9,6 +9,7 @@
   import AppPrompt from "$/components/dialogs/AppPrompt.svelte";
   import AppConfirm from "./dialogs/AppConfirm.svelte";
   import HelpDialog from "$/components/dialogs/HelpDialog.svelte";
+  import LogDialog from "$/components/dialogs/LogDialog.svelte";
   import { appPrompt } from "$/stores/prompt";
   import { apiKeyStore } from "$/services/api";
 
@@ -23,6 +24,7 @@
 
   let debugStuffShow = $state<boolean>(false);
   let helpShow = $state<boolean>(false);
+  let logShow = $state<boolean>(false);
 
   /**
    * Set the shared API key.
@@ -122,6 +124,9 @@
         title={$tr("main.debug")}>
         <MdIcon icon="bug_report" />
       </button>
+      <button class="btn btn-link btn-sm p-0" onclick={() => (logShow = true)} title={$tr("main.log")}>
+        <MdIcon icon="receipt_long" />
+      </button>
     </div>
   </footer>
 </div>
@@ -132,6 +137,10 @@
 
 {#if helpShow}
   <HelpDialog onClose={() => (helpShow = false)} />
+{/if}
+
+{#if logShow}
+  <LogDialog onClose={() => (logShow = false)} />
 {/if}
 
 <AppPrompt />

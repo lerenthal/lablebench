@@ -27,6 +27,7 @@
   } from "$/stores/app";
   import { connectDymo, connectDymoDevice, describeDymoError, disconnectDymo } from "$/utils/dymo";
   import { describeWrongPort, identifySerialPorts } from "$/utils/serial_identify";
+  import { logError, logInfo, logWarn } from "$/utils/app_log";
   import type { ConnectionType } from "$/types";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import MdIcon from "$/components/basic/MdIcon.svelte";
@@ -109,6 +110,7 @@
 
     initClient(connectionType);
     connectionState.set("connecting");
+    logInfo("printer", `Connecting over ${connectionType}`);
 
     try {
       if ($printerClient instanceof NiimbotCapacitorBleClient && $automation?.autoConnectDeviceId !== undefined) {
@@ -120,8 +122,11 @@
       if (transport !== undefined) {
         rememberDevice(await detectConnectedDevice(transport, before));
       }
+
+      logInfo("printer", `Connected over ${connectionType}`);
     } catch (e) {
       connectionState.set("disconnected");
+      logError("printer", `Could not connect over ${connectionType}`, e);
 
       // A machine has serial ports of its own, so the wrong one can be
       // picked. When that happens, the ports that were granted are asked
@@ -131,6 +136,7 @@
         const hint = describeWrongPort(identities);
 
         if (hint !== undefined) {
+          logWarn("printer", `The chosen port had no printer on it. ${hint}`);
           Toasts.error(`${e instanceof Error ? e.message : String(e)}\n\n${hint}`);
           await refreshReconnectTargets();
           return;

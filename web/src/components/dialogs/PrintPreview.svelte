@@ -22,6 +22,7 @@
   import { type LabelProps, type PostProcessType, type FabricJson, type PreviewProps, type TemplateModel, previewPropsKeys } from "$/types";
   import { evaluateWidth, headWidthForModel, printableWidth } from "$/utils/print_limits";
   import { DOTS_PER_CANVAS_PX, dymoEngine, dymoGeometry, printDymoLabel } from "$/utils/dymo";
+  import { logError, logInfo } from "$/utils/app_log";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import { canvasPreprocess } from "$/utils/canvas_preprocess";
@@ -166,6 +167,7 @@
   const onPrintDymo = async () => {
     printState = "printing";
     error = "";
+    logInfo("print", `Printing on the LabelWriter: ${pagesTotal} page(s), ${params.quantity} copy/copies`);
 
     const connection = $dymoConnection;
 
@@ -253,6 +255,10 @@
 
     printState = "printing";
     error = "";
+    logInfo(
+      "print",
+      `Printing on the NIIMBOT: ${pagesTotal} page(s), ${params.quantity} copy/copies`,
+    );
 
     $printerClient.stopHeartbeat();
 

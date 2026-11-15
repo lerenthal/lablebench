@@ -30,6 +30,7 @@ import { printDymoLabel, type DymoConnection, type DymoGeometry } from "$/utils/
 import { allocateSerialValues } from "$/utils/dynamic_values";
 import type { SerialConfig } from "$/types";
 import { evaluateWidth, printableWidth } from "$/utils/print_limits";
+import { logError, logInfo, logWarn } from "$/utils/app_log";
 import type { FabricJson, LabelProps } from "$/types";
 
 export type BatchRowStatus = "pending" | "printing" | "done" | "failed" | "skipped";
@@ -278,6 +279,8 @@ export async function runBatch(
     callbacks.onProgress?.(percent);
   });
 
+  logInfo("batch", `Batch started: ${results.length} row(s), ${totalCopies} label(s)`);
+
   try {
     await sink.open();
 
@@ -342,12 +345,15 @@ export async function runBatch(
         update(index, { status: "done" });
       } catch (e) {
         // A failed row is recorded and the batch continues.
-        update(index, { status: "failed", error: e instanceof Error ? e.message : String(e) });
+        const message = e instanceof Error ? e.message : String(e);
+        logError("batch", `Row ${index + 1} failed`, e);
+        update(index, { status: "failed", error: message });
       }
     }
 
   } catch (e) {
     if (e instanceof BatchCancelledError) {
+      logWarn("batch", "The batch was cancelled");
       for (let index = 0; index < results.length; index++) {
         if (results[index]!.status === "pending") {
           update(index, { status: "skipped" });

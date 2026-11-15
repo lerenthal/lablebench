@@ -464,5 +464,18 @@
   "help.preflight_fix": "Auto fix",
   "help.preflight_fix_desc": "The check finds the objects that run off the label and will be clipped. This button moves them back inside it, and makes an object smaller when it is too big to fit at all.",
   "connector.serial.no_printer": "No printer answered on that port",
-  "connector.serial.identifying": "Looking for the printer on the granted ports…"
+  "connector.serial.identifying": "Looking for the printer on the granted ports…",
+  "log.title": "App log",
+  "main.log": "Log",
+  "log.copy": "Copy",
+  "log.copied": "The log was copied to the clipboard",
+  "log.clear": "Clear",
+  "log.cleared": "The log was cleared",
+  "log.empty": "Nothing has been logged yet",
+  "log.filter": "Show",
+  "log.filter.all": "All",
+  "log.filter.error": "Errors",
+  "log.filter.warn": "Warnings",
+  "log.filter.info": "Notes",
+  "log.fallback": "The clipboard was refused, so the log is here to be copied by hand:"
 }

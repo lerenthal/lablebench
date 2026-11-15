@@ -24,6 +24,7 @@ import dayjs, { ManipulateType } from "dayjs";
 import { TextboxExt } from "$/fabric-object/textbox-ext";
 import type { SerialConfig } from "$/types";
 import { api } from "$/services/api";
+import { logError } from "$/utils/app_log";
 
 /** The merge-variable name the built-in date/time expression uses. */
 export const DATE_TIME_KEY = "dt";
@@ -241,6 +242,7 @@ export const allocateSerialValues = async (
     return { [config.variable]: formatSerialValue(counter.value, config) };
   } catch (e) {
     console.error("Could not take the next serial number", e);
+    logError("serial", "Could not take the next serial number", e);
     return {};
   }
 };
@@ -263,6 +265,7 @@ export const peekSerialValues = async (
     return { [config.variable]: formatSerialValue(value, config) };
   } catch (e) {
     console.error("Could not read the serial counter", e);
+    logError("serial", "Could not read the serial counter", e);
     return {};
   }
 };
