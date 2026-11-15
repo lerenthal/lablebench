@@ -478,5 +478,10 @@
   "main.status.disconnected": "Not connected",
   "connector.paper.loaded": "Loaded",
   "connector.paper.gap": "gap",
-  "preview.paper.mismatch": "The loaded label is not the size of this template:"
+  "preview.paper.mismatch": "The loaded label is not the size of this template:",
+  "editor.model.connected": "The printer that is connected. The app follows it.",
+  "editor.model.none": "No printer connected. The template keeps the model it was made for.",
+  "params.label.physical_size": "Label size",
+  "params.label.physical_size.hint": "across the print head × along the roll",
+  "params.label.flip": "Turn the label a quarter"
 }

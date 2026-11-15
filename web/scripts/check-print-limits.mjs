@@ -1,12 +1,20 @@
 /**
  * Executable check of the print-width decision logic.
  *
- * The module is bundled with the project's own esbuild (a Vite dependency) so
- * the real source is exercised, not a copy of it.
+ * The modules are bundled with the project's own esbuild (a Vite dependency)
+ * so the real source is exercised, not a copy of it.
+ *
+ * Everything here is in MILLIMETRES. A width in pixels only means something
+ * together with the resolution it was measured at, and the two sides of the
+ * comparison do not come from the same one: the label is drawn at the
+ * resolution the template was made at, while the print head is quoted in the
+ * printer's dots. Comparing the two directly blocks a 40 mm label on a B21,
+ * because 40 mm at 300 dpi is 472 px and the head is 384 px at 203 dpi — a
+ * 40 mm label on a 48 mm head, which fits perfectly well.
  */
 import { build } from "esbuild";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -14,21 +22,27 @@ import { dirname, join } from "node:path";
 // from an absolute path: the check has to run wherever the repository is
 // checked out, which is the point of running it at all.
 const WEB = dirname(dirname(fileURLToPath(import.meta.url)));
-const ENTRY = join(WEB, "src/utils/print_limits.ts");
 const outDir = mkdtempSync(join(tmpdir(), "lb-limits-"));
-const outFile = join(outDir, "print_limits.mjs");
 
-await build({
-  entryPoints: [ENTRY],
-  bundle: true,
-  format: "esm",
-  platform: "node",
-  outfile: outFile,
-  absWorkingDir: WEB,
-  logLevel: "error",
-});
+/** Bundle a module from the source tree and import it. */
+const load = async (entry) => {
+  const outFile = join(outDir, entry.replace(/[^a-z0-9]/gi, "_") + ".mjs");
 
-const mod = await import(pathToFileURL(outFile).href);
+  await build({
+    entryPoints: [entry],
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    outfile: outFile,
+    absWorkingDir: WEB,
+    logLevel: "error",
+  });
+
+  return await import(pathToFileURL(outFile).href);
+};
+
+const limits = await load(join(WEB, "src/utils/print_limits.ts"));
+const profile = await load(join(WEB, "src/utils/printer_profile.ts"));
 
 let failures = 0;
 const check = (name, actual, expected) => {
@@ -44,71 +58,108 @@ const check = (name, actual, expected) => {
 };
 
 console.log("head widths from the library's model table");
-check("d11 -> 96 px", mod.headWidthForModel("d11"), 96);
-check("b21 -> 384 px", mod.headWidthForModel("b21"), 384);
-check("unknown model -> undefined", mod.headWidthForModel(undefined), undefined);
+check("d11 -> 12 mm", limits.headMmForModel("d11"), 12);
+check("b21 -> 48 mm", limits.headMmForModel("b21"), 48);
+check("unknown model -> undefined", limits.headMmForModel(undefined), undefined);
 
 console.log("density ranges");
-check("d11 density 1..3", mod.densityRangeForModel("d11"), { min: 1, max: 3 });
-check("b21 density 1..5", mod.densityRangeForModel("b21"), { min: 1, max: 5 });
+check("d11 density 1..3", limits.densityRangeForModel("d11"), { min: 1, max: 3 });
+check("b21 density 1..5", limits.densityRangeForModel("b21"), { min: 1, max: 5 });
 
-console.log("evaluateWidth");
+console.log("evaluateWidth — everything in millimetres");
 check(
   "fits the device head -> no block, no warning",
-  mod.evaluateWidth(96, 8, 96, 96),
-  { printWidth: 96, blocked: undefined, warning: undefined },
+  limits.evaluateWidth(12, 12, undefined),
+  { printWidth: 12, blocked: undefined, warning: undefined },
 );
 check(
   "wider than the device head -> blocked",
-  mod.evaluateWidth(200, 8, 96, 96).blocked,
+  limits.evaluateWidth(25, 12, undefined).blocked,
   "25 mm > 12 mm",
 );
 check(
   "wider than the model head but the device can print it -> warning only",
-  mod.evaluateWidth(200, 8, 384, 96).warning,
+  limits.evaluateWidth(25, 48, 12).warning,
   "25 mm > 12 mm",
 );
 check(
   "wider than the model head and the device too -> blocked wins",
-  mod.evaluateWidth(200, 8, 96, 96).blocked,
+  limits.evaluateWidth(25, 12, 12).blocked,
   "25 mm > 12 mm",
 );
 check(
   "no device connected, model head exceeded -> warning only",
-  mod.evaluateWidth(200, 8, undefined, 96).warning,
+  limits.evaluateWidth(25, undefined, 12).warning,
   "25 mm > 12 mm",
 );
 check(
   "no device connected, model head exceeded -> not blocked",
-  mod.evaluateWidth(200, 8, undefined, 96).blocked,
+  limits.evaluateWidth(25, undefined, 12).blocked,
   undefined,
 );
 
-console.log("the resolution of the label and of the print head");
+console.log("the case that started this: a 40 x 20 mm label on a B21");
 check(
-  "a 40 mm label drawn at 300 dpi fits a B21 -> not blocked",
-  mod.evaluateWidth(472, 11.81, 384, 384).blocked,
+  "40 mm across the head on a 48 mm head -> not blocked",
+  limits.evaluateWidth(40, 48, 48).blocked,
   undefined,
 );
 check(
-  "the same label at 203 dpi -> not blocked either",
-  mod.evaluateWidth(320, 8, 384, 384).blocked,
-  undefined,
-);
-check(
-  "a 60 mm label on a B21 -> blocked, in millimetres",
-  mod.evaluateWidth(480, 8, 384, 384).blocked,
+  "60 mm across the head on a 48 mm head -> blocked, in millimetres",
+  limits.evaluateWidth(60, 48, 48).blocked,
   "60 mm > 48 mm",
 );
 check(
-  "a 60 mm label drawn at 300 dpi on a B21 -> still blocked",
-  mod.evaluateWidth(709, 11.81, 384, 384).blocked,
-  "60 mm > 48 mm",
-);
-check(
-  "a 40 mm label on a D11 -> blocked, the D11's head is 12 mm",
-  mod.evaluateWidth(320, 8, 96, 96).blocked,
+  "40 mm across the head on a D11's 12 mm head -> blocked",
+  limits.evaluateWidth(40, 12, 12).blocked,
   "40 mm > 12 mm",
+);
+
+console.log("the canvas a label of a given physical size needs");
+check(
+  "a 40 x 20 mm label on a B21, which feeds it the short way round",
+  profile.canvasForLabel(40, 20, "top", 8),
+  { width: 320, height: 160 },
+);
+check(
+  "the same label on a D11, which feeds it the long way round",
+  profile.canvasForLabel(40, 20, "left", 8),
+  { width: 160, height: 320 },
+);
+check(
+  "the physical size back out of a B21 canvas",
+  profile.physicalLabelOf(320, 160, "top", 8),
+  { acrossMm: 40, alongMm: 20 },
+);
+check(
+  "the physical size back out of a D11 canvas",
+  profile.physicalLabelOf(160, 320, "left", 8),
+  { acrossMm: 40, alongMm: 20 },
+);
+
+console.log("the label the printer has loaded");
+check(
+  "a 40 x 20 mm roll -> the canvas it needs, in the printer's way round",
+  (() => {
+    const loaded = profile.loadedLabelOf({ paperWidth: 40, paperHeight: 20 }, 8);
+    return profile.canvasForPrinter(loaded, "top", 8);
+  })(),
+  { width: 320, height: 160 },
+);
+check(
+  "no paper info -> nothing to apply",
+  profile.loadedLabelOf(undefined, 8),
+  undefined,
+);
+check(
+  "a width but no length -> the length is not known either",
+  profile.loadedLabelOf({ paperWidth: 40 }, 8),
+  undefined,
+);
+check(
+  "a continuous roll of 1000 mm -> not a label size, so not used",
+  profile.loadedLabelOf({ paperWidth: 40, paperHeight: 1000 }, 8),
+  undefined,
 );
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

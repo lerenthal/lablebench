@@ -12,7 +12,7 @@
     type TailPosition,
   } from "$/types";
   import LabelPresetsBrowser from "$/components/designer-controls/LabelPresetsBrowser.svelte";
-  import { printerInfo, printerMeta, printerProfile } from "$/stores/app";
+  import { printerMeta, printerProfile } from "$/stores/app";
   import { tr } from "$/utils/i18n";
   import { DEFAULT_LABEL_PRESETS, MODEL_LABEL_PRESETS } from "$/defaults";
   import { onMount, tick } from "svelte";
@@ -43,6 +43,36 @@
   const mirrorTypes: MirrorType[] = ["none", "flip", "copy"];
 
   let labelPresets = $state<LabelPreset[]>(DEFAULT_LABEL_PRESETS);
+
+  /**
+   * The label as it is measured: how wide it is across the print head, and
+   * how long it is along the roll.
+   *
+   * The canvas is in the printer's own orientation, so which of the two the
+   * canvas's width is depends on the way the printer feeds the label. The
+   * label itself is the same either way, and this is what the user measures
+   * with a ruler and what they therefore expect to see.
+   */
+  const physicalSize = $derived.by(() => {
+    const dpmm = labelProps.dpmm || 8;
+    const acrossPx = labelProps.printDirection === "left" ? labelProps.size.height : labelProps.size.width;
+    const alongPx = labelProps.printDirection === "left" ? labelProps.size.width : labelProps.size.height;
+
+    return {
+      acrossMm: Math.round((acrossPx / dpmm) * 100) / 100,
+      alongMm: Math.round((alongPx / dpmm) * 100) / 100,
+    };
+  });
+
+  /**
+   * The model the app designs for.
+   *
+   * While a printer is connected, that printer decides: its family is the
+   * one whose sizes are on offer, because those are the sizes it can
+   * actually print. With no printer connected, the template's own model is
+   * what it falls back to.
+   */
+  const effectiveModel = $derived($printerProfile?.model ?? model);
   let selectedPresetIndex = $state<number>(-1);
 
   let title = $state<string | undefined>("");
@@ -382,6 +412,29 @@
   $effect(() => {
     if (mirror === "flip" && splitParts !== 2) mirror = "copy";
   });
+
+  /**
+   * The way round the printer feeds a label.
+   *
+   * The printer decides this, so while one is connected its way round is
+   * the one the label is made in. The control stays, because a template can
+   * be made for a printer that is not plugged in yet — but it says which
+   * way round the connected one wants.
+   */
+  $effect(() => {
+    const printer = $printerProfile;
+    if (printer === undefined) return;
+
+    if (printDirection !== printer.direction) {
+      printDirection = printer.direction;
+
+      // The size follows the direction: the canvas is in the printer's own
+      // orientation, so turning the direction turns the size with it.
+      const widthTmp = width;
+      width = height;
+      height = widthTmp;
+    }
+  });
 </script>
 
 <AppModal title={$tr("params.label.menu_title")} {onClose} bind:this={modalRef} size="lg">
@@ -422,7 +475,7 @@
       {$tr("params.label.common_sizes")} · {model.toUpperCase()}
     </div>
     <div class="d-flex flex-wrap gap-1">
-      {#each MODEL_LABEL_PRESETS[model] ?? [] as preset (preset.title ?? `${preset.width}x${preset.height}`)}
+      {#each MODEL_LABEL_PRESETS[effectiveModel] ?? [] as preset (preset.title ?? `${preset.width}x${preset.height}`)}
         <button
           class="btn btn-sm btn-outline-secondary size-chip"
           title={`${preset.width} × ${preset.height} ${preset.unit}`}
@@ -447,12 +500,26 @@
   <div class="input-group flex-nowrap input-group-sm mb-2">
     <span class="input-group-text">{$tr("params.label.size")}</span>
     <input class="form-control" type="number" min="1" step={unit === "px" ? 8 : 1} bind:value={width} />
-    <button class="btn btn-sm btn-secondary" onclick={onFlip}><MdIcon icon="swap_horiz" /></button>
+    <button class="btn btn-sm btn-secondary" onclick={onFlip} title={$tr("params.label.flip")}><MdIcon icon="swap_horiz" /></button>
     <input class="form-control" type="number" min="1" step={unit === "px" ? 8 : 1} bind:value={height} />
     <select class="form-select" bind:value={unit} onchange={onUnitChange}>
       <option value="mm"> {$tr("params.label.mm")}</option>
       <option value="px"> {$tr("params.label.px")}</option>
     </select>
+  </div>
+
+  <!--
+    The size in the printer's own terms: how wide the label is across the
+    print head, and how long it is along the roll. This is what a ruler
+    measures and what the label stock is sold by, so it is spelled out
+    rather than left to be worked out from the two fields above.
+  -->
+  <div class="label-physical-size mb-2">
+    <span class="label-physical-size__label">{$tr("params.label.physical_size")}</span>
+    <span class="label-physical-size__value">
+      {physicalSize.acrossMm} &times; {physicalSize.alongMm} mm
+    </span>
+    <span class="label-physical-size__hint">{$tr("params.label.physical_size.hint")}</span>
   </div>
 
   {#if unit !== "px"}
@@ -625,6 +692,34 @@
   }
   .print-dir-switch label[for="print-dir-top"] .svg-icon {
     transform: rotate(90deg);
+  }
+
+  /* The label's physical size, spelled out in the printer's terms. */
+  .label-physical-size {
+    align-items: baseline;
+    background-color: var(--lb-surface-sunken);
+    border: 1px solid var(--lb-border);
+    border-radius: var(--lb-radius-sm);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--lb-space-2);
+    padding: 0.25rem 0.5rem;
+  }
+
+  .label-physical-size__label {
+    color: var(--lb-text-faint);
+    font-size: var(--lb-text-xs);
+  }
+
+  .label-physical-size__value {
+    color: var(--lb-text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .label-physical-size__hint {
+    color: var(--lb-text-faint);
+    font-size: var(--lb-text-xs);
   }
 
   .label-shape-switch label[for="label-shape-rect"] .svg-icon {

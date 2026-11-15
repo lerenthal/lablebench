@@ -15,6 +15,7 @@
     dimensionsUpdateRequest,
     loadedFonts,
     printerProfile,
+    rfidInfo,
   } from "$/stores/app";
   import {
     type ExportedLabelTemplate,
@@ -26,7 +27,8 @@
     type TemplateVariables,
   } from "$/types";
   import { FileUtils } from "$/utils/file_utils";
-  import { turnContent } from "$/utils/label_fit";
+  import { retargetToDirection } from "$/utils/label_fit";
+  import { canvasForPrinter, loadedLabelOf } from "$/utils/printer_profile";
   import { tr } from "$/utils/i18n";
   import { LabelDesignerObjectHelper } from "$/utils/label_designer_object_helper";
   import { LocalStoragePersistence } from "$/utils/persistence";
@@ -276,7 +278,12 @@
     // new label and centred on it. A label that was turned takes its
     // content with it.
     if (sizeChanged && oldSize.width > 0 && oldSize.height > 0) {
-      adaptContentToLabel(fabricCanvas!.getObjects(), oldSize, newProps.size);
+      adaptContentToLabel(
+        fabricCanvas!.getObjects(),
+        oldSize,
+        newProps.size,
+        newProps.shape ?? "rect",
+      );
       fabricCanvas!.requestRenderAll();
       editRevision++;
     }
@@ -314,6 +321,14 @@
     templateTags = label.tags ?? [];
 
     await loadLabelData(label);
+
+    // A template is drawn for a printer. When one is connected, the design
+    // follows it: the family it belongs to, and the way round the printer
+    // feeds a label. So a template made for the other family is turned a
+    // quarter and prints the right way up on the printer that is there.
+    if ($printerProfile !== undefined) {
+      adoptPrinter($printerProfile.model, $printerProfile.direction);
+    }
 
     undo.push(fabricCanvas!, labelProps);
     hasUnsavedChanges = false;
@@ -470,7 +485,15 @@
    */
   const adoptPrinter = (model: TemplateModel, direction: "left" | "top") => {
     if (labelProps.printDirection !== direction) {
-      const size = turnContent(fabricCanvas!.getObjects(), labelProps.size);
+      // The label is the same label; it is simply held the other way round
+      // by this printer. So the canvas is transposed and the design is
+      // turned with it — otherwise the text would come out sideways.
+      const size = retargetToDirection(
+        fabricCanvas!.getObjects(),
+        labelProps.size,
+        labelProps.printDirection,
+        direction,
+      );
 
       labelProps = { ...labelProps, printDirection: direction, size };
       fabricCanvas!.setDimensions(labelProps.size);
@@ -484,9 +507,58 @@
     }
   };
 
-  const onModelChanged = (model: TemplateModel) => {
-    templateModel = model;
-    hasUnsavedChanges = true;
+  /**
+   * Follow the printer that is plugged in.
+   *
+   * The app used to ask which printer a template was for, and the answer was
+   * a guess the user had to keep correcting — the printer was connected and
+   * the app still did not know what it was. Now the printer says what it is,
+   * and the design follows it: the direction it feeds a label in, and the
+   * family its sizes come from.
+   *
+   * A design that was drawn for the other family is turned a quarter, so it
+   * prints the right way round on the printer that is actually there.
+   */
+  let lastAdoptedPrinter: string | undefined;
+
+  $effect(() => {
+    const printer = $printerProfile;
+    if (printer === undefined || fabricCanvas === undefined) return;
+
+    const key = `${printer.libraryModel}:${printer.direction}`;
+    if (lastAdoptedPrinter === key) return;
+    lastAdoptedPrinter = key;
+
+    adoptPrinter(printer.model, printer.direction);
+
+    // The printer also knows what is loaded in it, so the label is sized
+    // from that rather than from a guess. A printer that does not report
+    // it leaves the app exactly as it was.
+    applyLoadedLabel();
+  });
+
+  /**
+   * Take the label the printer says it has loaded.
+   *
+   * The printer measures the media behind its print head, so it knows what
+   * is loaded and the app does not have to guess. The size is applied in the
+   * printer's own orientation, so the canvas comes out the right way round
+   * for the printer that is actually there.
+   */
+  const applyLoadedLabel = () => {
+    const printer = $printerProfile;
+    if (printer === undefined || fabricCanvas === undefined) return;
+
+    const loaded = loadedLabelOf($rfidInfo.paperInfo);
+    if (loaded === undefined) return;
+
+    const size = canvasForPrinter(loaded, printer.direction, printer.dpmm);
+
+    onUpdateLabelProps({
+      ...labelProps,
+      printDirection: printer.direction,
+      size: { width: size.width, height: size.height },
+    });
   };
 
   const onSave = () => {
@@ -910,6 +982,7 @@
     preflightFindings = runPreflight(fabricCanvas, {
       labelWidth: labelProps.size.width,
       labelHeight: labelProps.size.height,
+      shape: labelProps.shape ?? "rect",
     });
     currentDialog = "preflight";
   };
@@ -928,6 +1001,7 @@
       fabricCanvas.getObjects(),
       labelProps.size.width,
       labelProps.size.height,
+      labelProps.shape ?? "rect",
     );
 
     if (result.moved === 0 && result.scaled === 0) {
@@ -955,6 +1029,7 @@
     preflightFindings = runPreflight(fabricCanvas!, {
       labelWidth: labelProps.size.width,
       labelHeight: labelProps.size.height,
+      shape: labelProps.shape ?? "rect",
     });
   };
 
@@ -1008,23 +1083,27 @@
         canvas, grouped into named clusters, with a single primary action.
       -->
       <div class="designer-toolbar">
+        <!--
+          There is no printer model to choose any more.
+
+          The app used to offer a D11 and a B21 button, and the user had to
+          know which one was plugged in and keep pressing the right one. The
+          printer reports what it is, so the app follows it — and when no
+          printer is connected, the template's own model is what it says.
+        -->
         <div class="tool-group">
           <span class="tool-group__label">{$tr("editor.group.model")}</span>
           <div class="tool-group__buttons">
-            <div class="btn-group btn-group-sm" role="group" title={$tr("templates.model")}>
-              <button
-                class="btn btn-outline-secondary"
-                class:active={templateModel === "d11"}
-                onclick={() => onModelChanged("d11")}>
-                D11
-              </button>
-              <button
-                class="btn btn-outline-secondary"
-                class:active={templateModel === "b21"}
-                onclick={() => onModelChanged("b21")}>
-                B21
-              </button>
-            </div>
+            {#if $printerProfile !== undefined}
+              <span class="tool-group__printer" title={$tr("editor.model.connected")}>
+                <span class="tool-group__printer-name">{String($printerProfile.libraryModel)}</span>
+                <span class="tool-group__printer-head">{$printerProfile.headMm} mm</span>
+              </span>
+            {:else}
+              <span class="tool-group__printer tool-group__printer--none" title={$tr("editor.model.none")}>
+                {templateModel.toUpperCase()}
+              </span>
+            {/if}
           </div>
         </div>
 
@@ -1166,7 +1245,9 @@
         <div class="stage__head">
           <span class="stage__chip">
             <span class="stage__chip-dim">{labelProps.size.width} &times; {labelProps.size.height} px</span>
-            <span class="stage__chip-model">{templateModel.toUpperCase()}</span>
+            <span class="stage__chip-model">
+              {$printerProfile !== undefined ? String($printerProfile.libraryModel) : templateModel.toUpperCase()}
+            </span>
           </span>
 
           <!--
@@ -1613,6 +1694,33 @@
 
   .tool-group__buttons {
     flex-wrap: wrap;
+  }
+
+  /* The printer that is connected. It is a readout, not a control: the
+     printer is the authority on what it is, so there is nothing to press. */
+  .tool-group__printer {
+    align-items: baseline;
+    background-color: var(--lb-surface-sunken);
+    border: 1px solid var(--lb-border);
+    border-radius: var(--lb-radius-sm);
+    display: flex;
+    gap: var(--lb-space-2);
+    padding: 0.15rem 0.5rem;
+  }
+
+  .tool-group__printer-name {
+    color: var(--lb-text);
+    font-weight: 600;
+  }
+
+  .tool-group__printer-head {
+    color: var(--lb-text-faint);
+    font-size: var(--lb-text-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tool-group__printer--none {
+    color: var(--lb-text-faint);
   }
 
   /* --- the stage ---------------------------------------------------------------- */

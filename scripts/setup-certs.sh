@@ -7,11 +7,16 @@
 # each workstation has to trust — once per machine.
 #
 # Usage:
-#   ./scripts/setup-certs.sh [hostname] [extra-san ...]
+#   ./scripts/setup-certs.sh [hostname-or-ip] [extra-san ...]
 #
 # Examples:
 #   ./scripts/setup-certs.sh labelbench.local
 #   ./scripts/setup-certs.sh labelbench.local 10.10.17.185
+#   ./scripts/setup-certs.sh 10.10.17.185
+#
+# Passing an address issues a certificate for that address alone, which is
+# what a server reached by IP and port needs. The address is added to the
+# certificate as an IP SAN, so the browser accepts it.
 #
 # The root CA is written to $CAROOT (default ~/.local/share/mkcert). Copy
 # rootCA.pem to each workstation and import it into that machine's trust store.
@@ -47,8 +52,13 @@ LAN_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}' || true)"
 [[ -z "$LAN_IP" ]] && LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
 
 SANS=("$HOSTNAME_ARG")
+
 # The bare label, so "https://labelbench" works if the LAN resolver maps it.
-SANS+=("${HOSTNAME_ARG%%.*}")
+# An address has no bare form, so it is only added for a name.
+if [[ ! "$HOSTNAME_ARG" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  SANS+=("${HOSTNAME_ARG%%.*}")
+fi
+
 SANS+=("localhost" "127.0.0.1")
 [[ -n "$LAN_IP" ]] && SANS+=("$LAN_IP")
 SANS+=("$@")

@@ -13,6 +13,7 @@
 
 import {
   LabelType,
+  type PaperInfo,
   type PrinterModel,
   type PrinterModelMeta,
 } from "@mmote/niimbluelib";
@@ -137,17 +138,20 @@ export const resolveLabelType = (
   consumablesType: LabelType | undefined,
   requested: LabelType | undefined,
 ): LabelType => {
-  const understood = (printer?.paperTypes ?? []).filter(
+  const understood: LabelType[] = (printer?.paperTypes ?? []).filter(
     (t: LabelType) => t !== LabelType.Invalid,
   );
 
   if (understood.length > 0) {
-    if (requested !== undefined && understood.includes(requested as LabelType)) return requested;
-    if (consumablesType !== undefined && understood.includes(consumablesType as LabelType)) {
+    if (requested !== undefined && understood.includes(requested)) return requested;
+    if (consumablesType !== undefined && understood.includes(consumablesType)) {
       return consumablesType;
     }
     return understood.includes(LabelType.WithGaps) ? LabelType.WithGaps : understood[0];
   }
+
+  // Nothing is known about the printer's stock, so fall back to the
+  // ordinary kind with gaps, which is what most labels are.
 
   // Nothing is known about the printer's stock, so fall back to the
   // ordinary kind with gaps, which is what most labels are.
@@ -212,3 +216,77 @@ export const labelForCanvas = (
     alongMm: Math.round((alongPx / dpmm) * 100) / 100,
   };
 };
+
+/**
+ * A label measured the way a person measures it: how wide it is across the
+ * print head, and how long it is along the roll.
+ *
+ * These two are the same on every printer. Which of them the canvas's width
+ * is depends on the way the printer feeds the label, and that is what
+ * `printDirection` records.
+ */
+export interface PhysicalLabel {
+  /** The width across the print head, in millimetres. */
+  acrossMm: number;
+  /** The length along the roll, in millimetres. */
+  alongMm: number;
+}
+
+/**
+ * The physical size of a canvas, in millimetres.
+ */
+export const physicalLabelOf = (
+  width: number,
+  height: number,
+  direction: "left" | "top",
+  dpmm: number,
+): PhysicalLabel => {
+  const acrossPx = direction === "left" ? height : width;
+  const alongPx = direction === "left" ? width : height;
+
+  return {
+    acrossMm: Math.round((acrossPx / dpmm) * 100) / 100,
+    alongMm: Math.round((alongPx / dpmm) * 100) / 100,
+  };
+};
+
+/**
+ * The label the printer has loaded, as the sensor measured it.
+ *
+ * The sensor behind the print head reports the width of the media and the
+ * length of one label on it, both in millimetres. That is the one thing
+ * about the loaded stock the app cannot work out for itself, and it is the
+ * thing that makes a label print in the wrong place.
+ *
+ * The length is only taken when it is a plausible label length: on a
+ * continuous roll the sensor reports what is left of the media, which is not
+ * a label size at all.
+ */
+export const loadedLabelOf = (
+  paperInfo: PaperInfo | undefined,
+): PhysicalLabel | undefined => {
+  if (paperInfo?.paperWidth === undefined) return undefined;
+
+  const acrossMm = paperInfo.paperWidth;
+  const alongMm = paperInfo.paperHeight;
+
+  if (alongMm === undefined || alongMm <= 0 || alongMm > 300) {
+    return undefined;
+  }
+
+  return { acrossMm, alongMm };
+};
+
+/**
+ * The canvas a printer wants for a given label.
+ *
+ * The printer's own feed direction decides which way round the canvas is:
+ * a printer that takes the label the long way round has the canvas width
+ * running along the roll, and one that takes it the other way has the width
+ * crossing the head.
+ */
+export const canvasForPrinter = (
+  label: PhysicalLabel,
+  direction: "left" | "top",
+  dpmm: number,
+): { width: number; height: number } => canvasForLabel(label.acrossMm, label.alongMm, direction, dpmm);

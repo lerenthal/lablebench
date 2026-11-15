@@ -510,6 +510,44 @@ certificate is served — its private key stays in `/opt/labelbench/pki`.
 
 ## 7. Using it from a workstation
 
+### By IP and port, with no DNS at all
+
+A server on a lab network does not need a name. The app is reached at
+`https://<server-ip>:<port>/`, and the server's address is the only thing a
+workstation has to know. This is the recommended arrangement when the server
+is installed on someone else's machine, or when the network does not resolve
+names.
+
+Set the address in `.env` before the first start:
+
+```bash
+LABELBENCH_HOST=10.10.17.185     # the address the workstations open
+LABELBENCH_IP=10.10.17.185       # the address on the certificate
+LABELBENCH_HTTPS_PORT=8443
+LABELBENCH_HTTP_PORT=8082
+```
+
+The certificate must carry that address as an IP SAN, or the browser will
+refuse the connection however the CA is installed. Generate it with the
+address as well as the name:
+
+```bash
+./scripts/setup-certs.sh 10.10.17.185
+```
+
+Both forms then work side by side: a workstation that opens the address gets
+a valid certificate, and the plain-HTTP port on the same address serves the
+setup page that tells it how to trust the CA. The name is optional — if
+`LABELBENCH_HOST` is left empty, only the address is published, and nothing
+depends on name resolution working across the network.
+
+**The address and the name are separate origins.** A Bluetooth or serial
+grant made at `https://10.10.17.185:8443` does not carry to
+`https://labelbench.local:8443` or to a different port. A workstation that
+switches between them has to grant the printer again — which is why the
+address should be settled before the lab starts printing.
+
+
 ### The URL
 
 ```

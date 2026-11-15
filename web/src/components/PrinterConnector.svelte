@@ -18,6 +18,7 @@
     heartbeatData,
     printerInfo,
     printerMeta,
+    printerProfile,
     heartbeatFails,
     automation,
     rfidInfo,
@@ -209,30 +210,49 @@
     }
   };
 
-  const applyDimensionsClicked = () => {
+  /**
+   * The label the printer has loaded, in the printer's own words.
+   *
+   * The sensor behind the print head measures the media: how wide it is
+   * across the head, and how long one label is along the roll. Both are
+   * reported in millimetres.
+   *
+   * The two are not interchangeable, because the printer says which is
+   * which in the way it feeds the label: for a printer that takes the label
+   * the long way round, the width across the head is the canvas height.
+   */
+  const loadedLabelSize = (): { width: number; height: number } | undefined => {
     const paper = $rfidInfo.paperInfo;
-    let dpmm = 8;
+    if (paper?.paperWidth === undefined || paper?.paperHeight === undefined) return undefined;
 
-    // Every NIIMBOT prints at 203 dpi — 8 px/mm. The printer reports its
-    // head's resolution as 200, which is the same thing to within a rounding
-    // error, and no NIIMBOT is a 300 dpi machine.
-    if ($printerInfo.resolutionClass === ResolutionClass.DPI300) {
-      dpmm = 11.81;
-    } else if ($printerInfo.capabilities?.printheadDpi === 300) {
-      dpmm = 11.81;
+    const dpmm = $printerProfile?.dpmm ?? 8;
+    const direction = $printerProfile?.direction ?? "left";
+
+    const acrossPx = Math.floor(paper.paperWidth * dpmm);
+    const alongPx = Math.floor(paper.paperHeight * dpmm);
+
+    // The width across the head has to be a whole number of dots, and it
+    // cannot be wider than the head itself.
+    let across = acrossPx - (acrossPx % 8);
+    const headPx = $printerProfile?.headPixels ?? $printerInfo.printheadWidth;
+
+    if (headPx !== undefined && across > headPx) {
+      across = Math.floor(headPx / 8) * 8;
     }
 
-    if (paper?.paperWidth !== undefined && paper?.paperHeight !== undefined) {
-      let width = Math.floor(paper.paperWidth * dpmm);
-      let height = Math.floor(paper.paperHeight * dpmm);
+    // The canvas is in the printer's own orientation: for a printer that
+    // feeds the label the long way round, the canvas width runs along the
+    // roll and the height crosses the head.
+    return direction === "left"
+      ? { width: alongPx, height: across }
+      : { width: across, height: alongPx };
+  };
 
-      if ($printerInfo.printheadWidth !== undefined && width > $printerInfo.printheadWidth) {
-        width = $printerInfo.printheadWidth;
-      }
+  const applyDimensionsClicked = () => {
+    const size = loadedLabelSize();
 
-      width -= width % 8;
-
-      dimensionsUpdateRequest.set({ width, height }); // todo: print direction?
+    if (size !== undefined) {
+      dimensionsUpdateRequest.set(size);
     }
   };
 

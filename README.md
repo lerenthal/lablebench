@@ -84,7 +84,19 @@ The server never touches a printer.
   label, and one button puts them back inside it
 - The **canvas follows the label**: change the size, the shape or the
   orientation and the design on it is scaled to the new label and centred on
-  it. A label that is turned takes its content with it
+  it. A label that is turned takes its content with it. A **round label** is
+  handled as a round label: the printable area is the circle, so content in
+  its corners is found by the preflight check and moved inside it
+- **The printer is the authority.** There is no printer model to choose. The
+  app reads the printer's own model id and follows it — the way it feeds a
+  label, how wide its print head is, which densities it takes and which
+  kinds of stock it understands. Connect a printer and the design is turned
+  to suit it, so a design made for one family prints the right way up on the
+  other
+- **The label in the printer is read automatically.** The sensor behind the
+  print head measures the media, so the app knows what is loaded and sizes
+  the label to it — in the printer's own orientation, and in the terms a
+  label is measured and sold in: across the print head by along the roll
 - **Template import** — a `.json` template file is opened in the designer,
   ready to print
 
@@ -200,6 +212,34 @@ check liveness without a credential.
 > build on. A browser-trusted origin is a hard requirement.
 
 ---
+
+## Reaching the server by address and port, with no DNS
+
+A server installed on someone else's machine does not need a name. It is
+reached at `https://<server-ip>:<port>/` and the address is the only thing a
+workstation has to know.
+
+Set the address before the first start:
+
+```bash
+# .env
+LABELBENCH_HOST=10.10.17.185
+LABELBENCH_IP=10.10.17.185
+LABELBENCH_HTTPS_PORT=8443
+LABELBENCH_HTTP_PORT=8082
+```
+
+The certificate must carry that address as an IP SAN, or the browser refuses
+the connection however the CA is installed:
+
+```bash
+./scripts/setup-certs.sh 10.10.17.185
+```
+
+The address and the name are separate origins: a Bluetooth or serial grant
+made at `https://10.10.17.185:8443` does not carry to
+`https://labelbench.local:8443` or to another port. Settle on one address
+before the lab starts printing.
 
 ## Certificate setup
 
@@ -732,6 +772,24 @@ LabelBench/
 them instead of re-deriving the audit.
 
 ---
+
+## Reviewing the app
+
+`.claude/commands/app-review.md` is a review prompt for Claude Code. Type
+
+```
+/app-review
+```
+
+and it runs a full pre-deployment review: the build and typecheck, the API
+surface, the print-head and label-type decisions, the canvas adaptation, the
+printer integration, the templates, the CSV batch, the security and
+deployment, and the layout — then hands you a manual hardware checklist for
+the parts that cannot be checked without a printer on the desk.
+
+Every item is marked PASS, FAIL or BLOCKED, and a BLOCKED item says what
+hardware or credential is missing and what you have to do about it. Nothing
+is reported as verified that was not actually run.
 
 ## Further reading
 

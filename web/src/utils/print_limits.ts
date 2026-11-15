@@ -31,6 +31,14 @@ const MODEL_ENUM: Partial<Record<TemplateModel, PrinterModel>> = {
 };
 
 /**
+ * The resolution every NIIMBOT prints at.
+ *
+ * 203 dpi is 8 dots per millimetre. The 300 dpi _PRO models are the only
+ * exceptions, and they say so in their own metadata.
+ */
+export const NIIMBOT_DPMM = 8;
+
+/**
  * The print head of a model, in millimetres.
  *
  * The head is quoted in dots at the printer's own resolution, so it is

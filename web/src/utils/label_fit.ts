@@ -13,6 +13,100 @@
 
 import * as fabric from "fabric";
 
+/**
+ * The shape of a label.
+ *
+ * A label is not always a rectangle. A round label is a circle, and the
+ * corners of the canvas are outside it — anything drawn there is printed on
+ * nothing. A rounded rectangle has the same problem in its four corners.
+ *
+ * So the printable area of a label is not always the whole canvas, and the
+ * checks and the fitting both have to know which shape they are working
+ * with. The shape is the label's own; it does not depend on the printer.
+ */
+export type LabelShape = "rect" | "rounded_rect" | "circle";
+
+/** How far a rounded label's corners are rounded, in canvas pixels. */
+export const CORNER_RADIUS = 10;
+
+/**
+ * The rectangle a label's content must stay inside.
+ *
+ * For a rectangle that is the whole canvas. For a circle it is the largest
+ * square that fits inside it — the inscribed square, whose corners touch the
+ * circle — because a rectangle of content that fits in that square is
+ * entirely on the label. For a rounded rectangle it is the canvas inset by
+ * the corner radius, because that is the region where the corners cut in.
+ *
+ * The result is the area that content is fitted into and checked against.
+ */
+export const printableArea = (
+  width: number,
+  height: number,
+  shape: LabelShape = "rect",
+): { width: number; height: number; offsetX: number; offsetY: number } => {
+  if (shape === "circle") {
+    // The circle is inscribed in the canvas, so the largest square inside it
+    // has its side equal to the circle's diameter divided by root two.
+    const side = Math.min(width, height) / Math.SQRT2;
+
+    return {
+      width: side,
+      height: side,
+      offsetX: (width - side) / 2,
+      offsetY: (height - side) / 2,
+    };
+  }
+
+  if (shape === "rounded_rect") {
+    const inset = Math.min(CORNER_RADIUS, Math.floor(Math.min(width, height) / 2));
+
+    return { width: width - inset * 2, height: height - inset * 2, offsetX: inset, offsetY: inset };
+  }
+
+  return { width, height, offsetX: 0, offsetY: 0 };
+};
+
+/**
+ * Whether a point is on the label.
+ *
+ * The rectangle is a simple bounds test; the circle is a distance test from
+ * the middle; the rounded rectangle is the bounds test with the corners
+ * rounded off.
+ */
+export const isOnLabel = (
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  shape: LabelShape = "rect",
+): boolean => {
+  if (x < 0 || y < 0 || x > width || y > height) return false;
+
+  if (shape === "circle") {
+    const radius = Math.min(width, height) / 2;
+    const dx = x - width / 2;
+    const dy = y - height / 2;
+
+    return dx * dx + dy * dy <= radius * radius;
+  }
+
+  if (shape === "rounded_rect") {
+    const r = Math.min(CORNER_RADIUS, Math.floor(Math.min(width, height) / 2));
+    if (r <= 0) return true;
+
+    // The point is in a corner region; it must be within the corner arc.
+    const cx = x < r ? r : x > width - r ? width - r : x;
+    const cy = y < r ? r : y > height - r ? height - r : y;
+    const dx = x - cx;
+    const dy = y - cy;
+
+    return dx * dx + dy * dy <= r * r;
+  }
+
+  return true;
+};
+
 export interface FitResult {
   /** Objects that were moved back inside. */
   moved: number;
@@ -62,18 +156,24 @@ export const fitObjectsInsideLabel = (
   objects: fabric.FabricObject[],
   labelWidth: number,
   labelHeight: number,
+  shape: LabelShape = "rect",
 ): FitResult => {
   const result: FitResult = { moved: 0, scaled: 0, unchanged: 0 };
+
+  // The area content is kept inside is the label's own shape, not its
+  // bounding box: on a round label the corners of the canvas are not on the
+  // label at all, so content fitted to the box would still be clipped.
+  const area = printableArea(labelWidth, labelHeight, shape);
 
   for (const obj of objects) {
     let bounds = getObjectBounds(obj);
     const width = bounds.right - bounds.left;
     const height = bounds.bottom - bounds.top;
 
-    if (width > labelWidth || height > labelHeight) {
+    if (width > area.width || height > area.height) {
       const factor = Math.min(
-        width > labelWidth ? labelWidth / width : 1,
-        height > labelHeight ? labelHeight / height : 1,
+        width > area.width ? area.width / width : 1,
+        height > area.height ? area.height / height : 1,
       );
 
       // Scaling is about the object's origin, not its centre, so the
@@ -97,18 +197,23 @@ export const fitObjectsInsideLabel = (
       result.scaled++;
     }
 
+    const minX = area.offsetX;
+    const minY = area.offsetY;
+    const maxX = area.offsetX + area.width;
+    const maxY = area.offsetY + area.height;
+
     const dx =
-      bounds.left < 0
-        ? -bounds.left
-        : bounds.right > labelWidth
-          ? labelWidth - bounds.right
+      bounds.left < minX
+        ? minX - bounds.left
+        : bounds.right > maxX
+          ? maxX - bounds.right
           : 0;
 
     const dy =
-      bounds.top < 0
-        ? -bounds.top
-        : bounds.bottom > labelHeight
-          ? labelHeight - bounds.bottom
+      bounds.top < minY
+        ? minY - bounds.top
+        : bounds.bottom > maxY
+          ? maxY - bounds.bottom
           : 0;
 
     if (dx !== 0 || dy !== 0) {
@@ -173,6 +278,7 @@ export const adaptContentToLabel = (
   objects: fabric.FabricObject[],
   oldSize: { width: number; height: number },
   newSize: { width: number; height: number },
+  shape: LabelShape = "rect",
 ): AdaptResult => {
   if (objects.length === 0 || oldSize.width <= 0 || oldSize.height <= 0) {
     return { factor: 1, rotated: false };
@@ -206,10 +312,16 @@ export const adaptContentToLabel = (
   }
 
   // The content's own box, and the factor that fits it to the new label.
+  //
+  // The label it is fitted to is the label's printable area, which for a
+  // round or a rounded label is smaller than its bounding box. Fitting to
+  // the box would leave the content running off the edge of the round label
+  // and being clipped by it.
+  const area = printableArea(newSize.width, newSize.height, shape);
   const before = contentBounds(objects);
   const contentWidth = Math.max(1, before.right - before.left);
   const contentHeight = Math.max(1, before.bottom - before.top);
-  const factor = Math.min(newSize.width / contentWidth, newSize.height / contentHeight);
+  const factor = Math.min(area.width / contentWidth, area.height / contentHeight);
 
   for (const obj of objects) {
     obj.set({
@@ -222,9 +334,14 @@ export const adaptContentToLabel = (
   // Centre what is left on the new label. The shift is a plain move in the
   // label's coordinates, so it does not depend on where the object's origin
   // sits or which way it is turned.
+  //
+  // The centre is the centre of the printable area, which is the middle of
+  // the canvas for every shape — the circle and the rounded rectangle are
+  // both centred on it — but the area it is fitted to is not always the
+  // whole canvas.
   const after = contentBounds(objects);
-  const dx = (newSize.width - (after.right - after.left)) / 2 - after.left;
-  const dy = (newSize.height - (after.bottom - after.top)) / 2 - after.top;
+  const dx = area.offsetX + (area.width - (after.right - after.left)) / 2 - after.left;
+  const dy = area.offsetY + (area.height - (after.bottom - after.top)) / 2 - after.top;
 
   for (const obj of objects) {
     obj.set({
@@ -276,4 +393,30 @@ export const turnContent = (
   }
 
   return { width: size.height, height: size.width };
+};
+
+/**
+ * Point a design at a printer.
+ *
+ * The two printer families take the label differently: one feeds it the long
+ * way round, the other the short way. A design drawn for one is the other
+ * turned a quarter — and the label's own size is the same either way, so
+ * the canvas is transposed and the content is turned with it. The label
+ * that comes out of the printer is the same label; it is simply held the
+ * other way round.
+ *
+ * When the direction does not change, nothing is turned: the design is
+ * already the right way up for that printer.
+ */
+export const retargetToDirection = (
+  objects: fabric.FabricObject[],
+  size: { width: number; height: number },
+  from: "left" | "top",
+  to: "left" | "top",
+): { width: number; height: number } => {
+  if (from === to) {
+    return { width: size.width, height: size.height };
+  }
+
+  return turnContent(objects, size);
 };

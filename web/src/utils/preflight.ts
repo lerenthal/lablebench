@@ -1,4 +1,5 @@
 import * as fabric from "fabric";
+import { isOnLabel, type LabelShape } from "$/utils/label_fit";
 
 /**
  * Label preflight — a pure inspection of a fabric.js canvas.
@@ -41,6 +42,14 @@ export interface PreflightOptions {
   labelWidth: number;
   /** The label's printable height in canvas pixels. */
   labelHeight: number;
+  /**
+   * The label's shape.
+   *
+   * A round label is not covered by its bounding box — the corners of the
+   * canvas are not on the label — so content that runs into them is clipped
+   * even though it is inside the box.
+   */
+  shape?: LabelShape;
   /** Minimum font size, in canvas pixels, below which text is flagged as too small. Default 8. */
   minFontSize?: number;
   /** Minimum WCAG contrast ratio for text. Default 3 for large text, 4.5 otherwise. */
@@ -259,13 +268,51 @@ const getObjectBounds = (obj: fabric.FabricObject): Bounds => {
 const boundsOverlap = (a: Bounds, b: Bounds): boolean =>
   a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
-/** How far the object sticks out of the label, in canvas pixels. */
-const outsideAmount = (bounds: Bounds, labelWidth: number, labelHeight: number): number => {
+/**
+ * How far the object sticks out of the label, in canvas pixels.
+ *
+ * For a rectangle that is the distance past any of the four edges. For the
+ * other shapes the corners of the object's own box are tested against the
+ * label itself, because a round label's corners are not on it: an object in
+ * the corner of a round label is clipped, even though its box is inside the
+ * canvas.
+ */
+const outsideAmount = (
+  bounds: Bounds,
+  labelWidth: number,
+  labelHeight: number,
+  shape: LabelShape = "rect",
+): number => {
   const left = Math.max(0, -bounds.left);
   const top = Math.max(0, -bounds.top);
   const right = Math.max(0, bounds.right - labelWidth);
   const bottom = Math.max(0, bounds.bottom - labelHeight);
-  return Math.max(left, top, right, bottom);
+  const edge = Math.max(left, top, right, bottom);
+
+  if (shape === "rect") return edge;
+
+  // The four corners of the object's box, each tested against the label.
+  const corners: [number, number][] = [
+    [bounds.left, bounds.top],
+    [bounds.right, bounds.top],
+    [bounds.left, bounds.bottom],
+    [bounds.right, bounds.bottom],
+  ];
+
+  let worst = edge;
+
+  for (const [x, y] of corners) {
+    if (isOnLabel(x, y, labelWidth, labelHeight, shape)) continue;
+
+    // How far outside is this corner? Measured to the label's edge for the
+    // flat sides, and to the shape itself for the round ones.
+    const dx = x < 0 ? -x : x > labelWidth ? x - labelWidth : 0;
+    const dy = y < 0 ? -y : y > labelHeight ? y - labelHeight : 0;
+
+    worst = Math.max(worst, Math.hypot(dx, dy), 1);
+  }
+
+  return worst;
 };
 
 /* ------------------------------------------------------------------ */
@@ -466,6 +513,7 @@ export const runPreflight = (
 ): PreflightFinding[] => {
   const labelWidth = Math.max(0, options.labelWidth);
   const labelHeight = Math.max(0, options.labelHeight);
+  const shape = options.shape ?? "rect";
   const minFontSize = options.minFontSize ?? DEFAULT_MIN_FONT_SIZE;
   const minContrastRatio = options.minContrastRatio;
 
@@ -497,7 +545,7 @@ export const runPreflight = (
     const bounds = getObjectBounds(obj);
 
     // 2. outside-label — the object would be clipped by the label edge.
-    const outside = outsideAmount(bounds, labelWidth, labelHeight);
+    const outside = outsideAmount(bounds, labelWidth, labelHeight, shape);
     if (outside > OUTSIDE_TOLERANCE_PX) {
       push(
         "outside-label",

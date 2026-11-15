@@ -36,8 +36,11 @@ export const DEFAULT_LABEL_PRESETS: LabelPreset[] = [
   // Every NIIMBOT prints at 203 dpi — 8 px/mm — so every label is.
   // The first is a D11 label (12 mm across the head, 40 mm along the roll)
   // and the second a B21 one (48 mm across the head, 30 mm along).
-  { width: 40, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect" },
-  { width: 48, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect" },
+  //
+  // The titles read across the head × along the roll, which is the order a
+  // label is measured and sold in.
+  { width: 40, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "12 × 40 mm" },
+  { width: 48, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "48 × 30 mm" },
 ];
 
 /**
@@ -60,12 +63,12 @@ export const MODEL_LABEL_PRESETS: Record<TemplateModel, LabelPreset[]> = {
   // the roll and the canvas height across the head. These are 12 mm and 8 mm
   // wide rolls — the head is 12 mm.
   d11: [
-    { width: 40, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "40 × 12 mm" },
-    { width: 30, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "30 × 12 mm" },
-    { width: 20, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "20 × 12 mm" },
-    { width: 15, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "15 × 12 mm" },
-    { width: 30, height: 8, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "30 × 8 mm" },
-    { width: 20, height: 8, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "20 × 8 mm" },
+    { width: 40, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "12 × 40 mm" },
+    { width: 30, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "12 × 30 mm" },
+    { width: 20, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "12 × 20 mm" },
+    { width: 15, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "12 × 15 mm" },
+    { width: 30, height: 8, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "8 × 30 mm" },
+    { width: 20, height: 8, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "8 × 20 mm" },
   ],
   // A B21 takes the label the other way: the canvas width crosses the head
   // and the canvas height runs along the roll. The head is 48 mm, so these
