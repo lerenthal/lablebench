@@ -12,7 +12,7 @@
     type TailPosition,
   } from "$/types";
   import LabelPresetsBrowser from "$/components/designer-controls/LabelPresetsBrowser.svelte";
-  import { printerInfo, printerMeta } from "$/stores/app";
+  import { printerInfo, printerMeta, printerProfile } from "$/stores/app";
   import { tr } from "$/utils/i18n";
   import { DEFAULT_LABEL_PRESETS, MODEL_LABEL_PRESETS } from "$/defaults";
   import { onMount, tick } from "svelte";
@@ -65,24 +65,26 @@
   let warnings = $derived.by<string[]>(() => {
     let lines: string[] = [];
 
-    const printWidth = labelProps.printDirection == "left" ? labelProps.size.height : labelProps.size.width;
+    /** The width the label lays down across the print head, in millimetres. */
+    const printWidth =
+      Math.round(
+        ((labelProps.printDirection == "left"
+          ? labelProps.size.height
+          : labelProps.size.width) /
+          labelProps.dpmm) *
+          100,
+      ) / 100;
 
-    let headSize = -1;
+    // The head width of the connected printer, in millimetres.
+    const headSize = $printerProfile?.headMm;
 
-    if ($printerInfo?.printheadWidth !== undefined) {
-      headSize = $printerInfo.printheadWidth;
-    } else if ($printerMeta?.printheadPixels !== undefined) {
-      headSize = $printerMeta.printheadPixels;
-    }
-
-    if (headSize > 0) {
+    if (headSize !== undefined && headSize > 0) {
       // Compared in millimetres: the label's own resolution and the print
       // head's are not the same thing. A 40 mm label drawn at 300 dpi is
       // 472 px wide, and the head of a B21 is 384 px at 203 dpi — comparing
       // those two directly would block a label that fits perfectly well.
       const evaluation = evaluateWidth(
         printWidth,
-        labelProps.dpmm,
         headSize,
         undefined,
       );

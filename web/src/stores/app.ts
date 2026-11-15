@@ -1,4 +1,4 @@
-import { get, readable, writable } from "svelte/store";
+import { derived, get, readable, writable } from "svelte/store";
 import {
   AppConfigSchema,
   CsvParamsSchema,
@@ -28,6 +28,7 @@ import { LocalStoragePersistence, writablePersisted } from "$/utils/persistence"
 import { APP_CONFIG_DEFAULTS, CSV_DEFAULT, OBJECT_DEFAULTS_TEXT } from "$/defaults";
 import z from "zod";
 import { FileUtils } from "$/utils/file_utils";
+import { connectedPrinterFor } from "$/utils/printer_profile";
 
 export const fontCache = writable<string[]>([OBJECT_DEFAULTS_TEXT.fontFamily]);
 export const appConfig = writablePersisted<AppConfig>("config", AppConfigSchema, APP_CONFIG_DEFAULTS);
@@ -42,6 +43,14 @@ export const heartbeatData = writable<HeartbeatData>();
 export const printerInfo = writable<PrinterInfo>();
 export const rfidInfo = writable<CombinedRfidInfo>({});
 export const printerMeta = writable<PrinterModelMeta | undefined>();
+
+/**
+ * What the connected printer is and what it can do.
+ *
+ * Derived from the printer's own model id, so the app knows which printer it
+ * is talking to without being told.
+ */
+export const printerProfile = derived(printerMeta, ($printerMeta) => connectedPrinterFor($printerMeta));
 export const heartbeatFails = writable<number>(0);
 export const csvData = writablePersisted<CsvParams>("csv_params", CsvParamsSchema, { data: CSV_DEFAULT });
 export const dimensionsUpdateRequest = writable<{width: number, height: number} | null>(null);

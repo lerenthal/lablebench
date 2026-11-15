@@ -34,6 +34,8 @@ export const configureFabric = () => {
 /** Default presets for LabelPropsEditor */
 export const DEFAULT_LABEL_PRESETS: LabelPreset[] = [
   // Every NIIMBOT prints at 203 dpi — 8 px/mm — so every label is.
+  // The first is a D11 label (12 mm across the head, 40 mm along the roll)
+  // and the second a B21 one (48 mm across the head, 30 mm along).
   { width: 40, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect" },
   { width: 48, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect" },
 ];
@@ -54,6 +56,9 @@ export const DEFAULT_LABEL_PRESETS: LabelPreset[] = [
  * one click rather than typed in millimetres.
  */
 export const MODEL_LABEL_PRESETS: Record<TemplateModel, LabelPreset[]> = {
+  // A D11 takes the label the long way round, so the canvas width runs along
+  // the roll and the canvas height across the head. These are 12 mm and 8 mm
+  // wide rolls — the head is 12 mm.
   d11: [
     { width: 40, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "40 × 12 mm" },
     { width: 30, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "30 × 12 mm" },
@@ -62,13 +67,16 @@ export const MODEL_LABEL_PRESETS: Record<TemplateModel, LabelPreset[]> = {
     { width: 30, height: 8, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "30 × 8 mm" },
     { width: 20, height: 8, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "20 × 8 mm" },
   ],
+  // A B21 takes the label the other way: the canvas width crosses the head
+  // and the canvas height runs along the roll. The head is 48 mm, so these
+  // are 48 mm, 25 mm and 12 mm wide rolls.
   b21: [
-    { width: 100, height: 48, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "100 × 48 mm" },
-    { width: 50, height: 48, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "50 × 48 mm" },
-    { width: 30, height: 48, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "30 × 48 mm" },
-    { width: 50, height: 25, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "50 × 25 mm" },
-    { width: 30, height: 25, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "30 × 25 mm" },
-    { width: 30, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "30 × 12 mm" },
+    { width: 48, height: 100, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "48 × 100 mm" },
+    { width: 48, height: 50, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "48 × 50 mm" },
+    { width: 48, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "48 × 30 mm" },
+    { width: 25, height: 50, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "25 × 50 mm" },
+    { width: 25, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "25 × 30 mm" },
+    { width: 12, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "12 × 30 mm" },
   ],
 };
 

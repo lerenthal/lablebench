@@ -7,7 +7,15 @@
   import { Barcode } from "$/fabric-object/barcode";
   import { QRCode } from "$/fabric-object/qrcode";
   import { iconCodepoints, type MaterialIcon } from "$/styles/mdi_icons";
-  import { appConfig, automation, connectionState, csvData, dimensionsUpdateRequest, loadedFonts } from "$/stores/app";
+  import {
+    appConfig,
+    automation,
+    connectionState,
+    csvData,
+    dimensionsUpdateRequest,
+    loadedFonts,
+    printerProfile,
+  } from "$/stores/app";
   import {
     type ExportedLabelTemplate,
     type FabricJson,
@@ -18,6 +26,7 @@
     type TemplateVariables,
   } from "$/types";
   import { FileUtils } from "$/utils/file_utils";
+  import { turnContent } from "$/utils/label_fit";
   import { tr } from "$/utils/i18n";
   import { LabelDesignerObjectHelper } from "$/utils/label_designer_object_helper";
   import { LocalStoragePersistence } from "$/utils/persistence";
@@ -447,6 +456,32 @@
   const onTemplateVariablesChanged = (variables: TemplateVariables) => {
     templateVariables = variables;
     hasUnsavedChanges = true;
+  };
+
+  /**
+   * Point the design at a printer.
+   *
+   * The two printer families take the label differently: one feeds it the
+   * long way round, the other the short way. A design drawn for one is the
+   * other turned a quarter, so moving a design between them turns the
+   * content and transposes the canvas — which leaves the printed label
+   * exactly as it was and the design drawn in the new printer's own
+   * convention.
+   */
+  const adoptPrinter = (model: TemplateModel, direction: "left" | "top") => {
+    if (labelProps.printDirection !== direction) {
+      const size = turnContent(fabricCanvas!.getObjects(), labelProps.size);
+
+      labelProps = { ...labelProps, printDirection: direction, size };
+      fabricCanvas!.setDimensions(labelProps.size);
+      fabricCanvas!.requestRenderAll();
+      editRevision++;
+    }
+
+    if (templateModel !== model) {
+      templateModel = model;
+      hasUnsavedChanges = true;
+    }
   };
 
   const onModelChanged = (model: TemplateModel) => {

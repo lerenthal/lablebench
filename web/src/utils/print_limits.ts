@@ -21,7 +21,8 @@
  */
 
 import { PrinterModel, getPrinterMetaByModel } from "@mmote/niimbluelib";
-import { PRINT_HEAD_PIXELS, type TemplateModel } from "$/types";
+import { type TemplateModel } from "$/types";
+import { dpmmForDpi } from "$/utils/printer_profile";
 
 /** The template's target model → the library's model enum. */
 const MODEL_ENUM: Partial<Record<TemplateModel, PrinterModel>> = {
@@ -30,17 +31,23 @@ const MODEL_ENUM: Partial<Record<TemplateModel, PrinterModel>> = {
 };
 
 /**
- * The print-head width of a model, in pixels at its native resolution.
+ * The print head of a model, in millimetres.
  *
- * Returns undefined for an unknown model rather than guessing.
+ * The head is quoted in dots at the printer's own resolution, so it is
+ * converted with that resolution: the B21 is 384 dots at 203 dpi, which is
+ * 48 mm, and the D11 is 96 dots at 203 dpi, which is 12 mm.
  */
-export const headWidthForModel = (model: TemplateModel | undefined): number | undefined => {
+export const headMmForModel = (model: TemplateModel | undefined): number | undefined => {
   if (model === undefined) {
     return undefined;
   }
 
   const meta = getPrinterMetaByModel(MODEL_ENUM[model]!);
-  return meta?.printheadPixels;
+  if (meta === undefined) {
+    return undefined;
+  }
+
+  return Math.round((meta.printheadPixels / dpmmForDpi(meta.dpi)) * 10) / 10;
 };
 
 /**
@@ -64,18 +71,8 @@ export const densityRangeForModel = (
   return { min: meta.densityMin, max: meta.densityMax };
 };
 
-/**
- * The resolution every NIIMBOT prints at: 203 dpi, 8 px per millimetre.
- *
- * The D11's head is 96 px wide and the B21's is 384 px, which is 12 mm and
- * 48 mm of label respectively.
- */
-export const NIIMBOT_DPMM = 8;
-
-const mm = (pixels: number, dpmm: number): number => Math.round((pixels / dpmm) * 10) / 10;
-
 export interface WidthEvaluation {
-  /** The width the printer will actually lay down, in pixels. */
+  /** The width the printer will actually lay down, in millimetres. */
   printWidth: number;
   /** Set when the raster must not be sent: the device cannot print it. */
   blocked: string | undefined;
@@ -86,57 +83,56 @@ export interface WidthEvaluation {
 /**
  * Decide what to do about a raster of a given width.
  *
- * The comparison is made in millimetres, not in pixels. A pixel count only
- * means something together with the resolution it was measured at, and the
- * two sides of the comparison do not necessarily come from the same one:
- * a label designed at 300 dpi is wider in pixels than the same label at
- * 203 dpi, and the print head is always quoted at the printer's own
- * resolution. Comparing the two directly blocks a 40 mm label on a B21
- * because 40 mm at 300 dpi is 472 px and the head is 384 px at 203 dpi —
- * a 40 mm label on a 48 mm head, which fits perfectly well.
+ * Everything here is in millimetres. A width in pixels only means something
+ * together with the resolution it was measured at, and the two sides of the
+ * comparison do not come from the same one: the label is drawn at the
+ * resolution the template was made at, while the print head is quoted in the
+ * printer's dots. Comparing the two directly blocks a 40 mm label on a B21
+ * because 40 mm at 300 dpi is 472 px and the head is 384 px at 203 dpi — a
+ * 40 mm label on a 48 mm head, which fits perfectly well.
  *
- * @param printWidth      the raster width in the printer's print direction
- * @param printDpmm       the resolution that raster was measured at
- * @param deviceHeadWidth the connected printer's print head width, if known
- * @param modelHeadWidth  the head width of the model the template targets
+ * @param printWidthMm  the raster width across the print head, in millimetres
+ * @param deviceHeadMm  the connected printer's head width, if known
+ * @param modelHeadMm   the head width of the model the template targets
  */
 export const evaluateWidth = (
-  printWidth: number,
-  printDpmm: number,
-  deviceHeadWidth: number | undefined,
-  modelHeadWidth: number | undefined,
+  printWidthMm: number,
+  deviceHeadMm: number | undefined,
+  modelHeadMm: number | undefined,
 ): WidthEvaluation => {
   const evaluation: WidthEvaluation = {
-    printWidth,
+    printWidth: printWidthMm,
     blocked: undefined,
     warning: undefined,
   };
 
-  const labelMm = mm(printWidth, printDpmm || NIIMBOT_DPMM);
-
-  if (deviceHeadWidth !== undefined) {
-    const deviceMm = mm(deviceHeadWidth, NIIMBOT_DPMM);
-    if (labelMm > deviceMm) {
-      evaluation.blocked = `${labelMm} mm > ${deviceMm} mm`;
-      return evaluation;
-    }
+  if (deviceHeadMm !== undefined && printWidthMm > deviceHeadMm) {
+    evaluation.blocked = `${printWidthMm} mm > ${deviceHeadMm} mm`;
+    return evaluation;
   }
 
-  if (modelHeadWidth !== undefined) {
-    const modelMm = mm(modelHeadWidth, NIIMBOT_DPMM);
-    if (labelMm > modelMm) {
-      evaluation.warning = `${labelMm} mm > ${modelMm} mm`;
-    }
+  if (modelHeadMm !== undefined && printWidthMm > modelHeadMm) {
+    evaluation.warning = `${printWidthMm} mm > ${modelHeadMm} mm`;
   }
 
   return evaluation;
 };
 
 /**
- * The printable width of a canvas, for the given print direction.
+ * The width a canvas lays down across the print head, in millimetres.
  *
  * The label is fed to the head along its long axis, so a "left" print
- * direction lays down the canvas height.
+ * direction lays down the canvas height. The canvas is in the template's own
+ * pixels, so it is converted with the template's resolution.
+ *
+ * The result is a physical width, which is the only thing that can be
+ * compared with a print head — the head is quoted in the printer's dots.
  */
-export const printableWidth = (canvas: HTMLCanvasElement, printDirection: "left" | "top"): number =>
-  printDirection === "left" ? canvas.height : canvas.width;
+export const printableWidthMm = (
+  canvas: HTMLCanvasElement,
+  printDirection: "left" | "top",
+  dpmm: number,
+): number => {
+  const pixels = printDirection === "left" ? canvas.height : canvas.width;
+  return Math.round((pixels / dpmm) * 100) / 100;
+};

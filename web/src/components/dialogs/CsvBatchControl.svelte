@@ -10,7 +10,7 @@
    * a CSV of the same shape just works.
    */
   import { LabelType, PageColorType, type PrintTaskName } from "@mmote/niimbluelib";
-  import { connectionState, printerClient, printerInfo, printerMeta } from "$/stores/app";
+  import { connectionState, printerClient, printerInfo, printerMeta, printerProfile } from "$/stores/app";
   import AppModal from "$/components/basic/AppModal.svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr } from "$/utils/i18n";
@@ -32,7 +32,7 @@
   } from "$/utils/batch_printer";
     import { DEFAULT_RENDER_PARAMS, renderLabelCanvas, type RenderParams } from "$/utils/label_render";
   import { extractVariablesFromJson } from "$/utils/canvas_preprocess";
-  import { headWidthForModel } from "$/utils/print_limits";
+  import { headMmForModel } from "$/utils/print_limits";
   import {
     PRINT_HEAD_PIXELS,
     type ExportedLabelTemplate,
@@ -120,13 +120,12 @@
   );
 
   /**
-   * The head width of the connected printer, in the app's canvas pixels.
+   * The head width of the connected printer, in millimetres.
    *
-   * A NIIMBOT reports its own head width over the wire.
+   * A NIIMBOT reports its own head width over the wire, in its own dots.
+   * The printer's profile carries it already converted.
    */
-  const deviceHeadWidth = $derived(
-    $printerInfo?.printheadWidth ?? $printerMeta?.printheadPixels,
-  );
+  const deviceHeadWidthMm = $derived($printerProfile?.headMm);
   const totalPages = $derived(Math.max(1, Math.ceil(rows.length / pageSize)));
   const currentPageRows = $derived(rows.slice(page * pageSize, page * pageSize + pageSize));
   const doneCount = $derived(rowStates.filter((row) => row.status === "done").length);
@@ -325,8 +324,8 @@
           renderParams: { ...DEFAULT_RENDER_PARAMS, postProcess: dithering },
           serialConfig:
             serialEnabled && serialVariable !== "" ? serialConfig() : undefined,
-          headWidth: deviceHeadWidth,
-          modelHeadWidth: headWidthForModel(template.model),
+          headWidthMm: deviceHeadWidthMm,
+          modelHeadWidthMm: headMmForModel(template.model),
         },
         states,
         {
@@ -384,14 +383,17 @@
       : "",
   );
 
-  const headWidth = $derived($printerInfo?.printheadWidth ?? $printerMeta?.printheadPixels);
+  const headWidth = $derived($printerProfile?.headMm);
+  /** The width the label lays down across the head, in millimetres. */
   const printableWidth = $derived(
-    rotation === "left" ? labelProps.size.height : labelProps.size.width,
+    Math.round(
+      ((rotation === "left" ? labelProps.size.height : labelProps.size.width) / labelProps.dpmm) * 100,
+    ) / 100,
   );
   /** The device cannot print this width, so the rows are rejected. */
   const widthOverflow = $derived(headWidth !== undefined && printableWidth > headWidth);
   /** The template's own model is narrower. A wider printer still prints it. */
-  const modelHeadWidth = $derived(headWidthForModel(template.model));
+  const modelHeadWidth = $derived(headMmForModel(template.model));
   const modelWidthMismatch = $derived(
     modelHeadWidth !== undefined && printableWidth > modelHeadWidth && !widthOverflow,
   );
@@ -574,7 +576,7 @@
       {#if widthOverflow}
         <div class="alert alert-danger py-1 px-2 small">
           <MdIcon icon="block" />
-          {$tr("batch.width_warning")} ({printableWidth} px &gt; {headWidth} px)
+          {$tr("batch.width_warning")} ({printableWidth} mm &gt; {headWidth} mm)
         </div>
       {/if}
 

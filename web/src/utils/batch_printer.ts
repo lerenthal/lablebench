@@ -28,7 +28,7 @@ import {
 import { renderLabelCanvas, resampleToDpmm, type RenderParams } from "$/utils/label_render";
 import { allocateSerialValues } from "$/utils/dynamic_values";
 import type { SerialConfig } from "$/types";
-import { evaluateWidth, NIIMBOT_DPMM, printableWidth } from "$/utils/print_limits";
+import { evaluateWidth, NIIMBOT_DPMM, printableWidthMm } from "$/utils/print_limits";
 import { logError, logInfo, logWarn } from "$/utils/app_log";
 import type { FabricJson, LabelProps } from "$/types";
 
@@ -77,7 +77,10 @@ export type BatchPrinterOptions = {
   labelProps: LabelProps;
   renderParams: RenderParams;
   /** Print head width in pixels. Rows wider than this are rejected, never sent. */
-  headWidth?: number;
+  /** The connected printer's head width, in millimetres. */
+  headWidthMm?: number;
+  /** The head width of the model the template targets, in millimetres. */
+  modelHeadWidthMm?: number;
   /** The head width of the model the template targets. Rows wider than this are flagged, not rejected. */
   modelHeadWidth?: number;
   /**
@@ -284,19 +287,18 @@ export async function runBatch(
           // §5.1: never send an over-wide raster. Reject the row with a clear
           // message instead of letting the printer receive something it cannot print.
           //
-          // The raster is measured in the head's own dots, so it is put back
-          // into the app's canvas pixels before it is compared with a head
-          // width, which is always in those.
+          // Both sides are in millimetres, so a label is compared with the
+          // head by its physical size rather than by pixels from two
+          // different resolutions.
           const evaluation = evaluateWidth(
-            printableWidth(canvas, options.labelProps.printDirection),
-            NIIMBOT_DPMM,
-            options.headWidth,
-            options.modelHeadWidth,
+            printableWidthMm(canvas, options.labelProps.printDirection, options.labelProps.dpmm),
+            options.headWidthMm,
+            options.modelHeadWidthMm,
           );
 
           if (evaluation.blocked !== undefined) {
             throw new Error(
-              `Label is ${evaluation.printWidth} px wide but the print head is ${options.headWidth} px. ` +
+              `Label is ${evaluation.printWidth} mm wide but the print head is ${options.headWidthMm} mm. ` +
                 `Reduce the label width or choose a template for this printer.`,
             );
           }

@@ -3,7 +3,14 @@
   import { derived } from "svelte/store";
   import { allocateSerialValues, peekSerialValues } from "$/utils/dynamic_values";
   import type { SerialConfig } from "$/types";
-  import { connectionState, printerClient, printerInfo, printerMeta, rfidInfo } from "$/stores/app";
+  import {
+  connectionState,
+  printerClient,
+  printerInfo,
+  printerMeta,
+  printerProfile,
+  rfidInfo,
+} from "$/stores/app";
   import * as effects from "$/utils/post_process";
   import { resampleToDpmm } from "$/utils/label_render";
   import {
@@ -21,8 +28,14 @@
     PrintTaskCapability as TaskCap,
   } from "@mmote/niimbluelib";
   import { type LabelProps, type PostProcessType, type FabricJson, type PreviewProps, type TemplateModel, previewPropsKeys } from "$/types";
-  import { evaluateWidth, headWidthForModel, NIIMBOT_DPMM, printableWidth } from "$/utils/print_limits";
+  import {
+    evaluateWidth,
+    headMmForModel,
+    NIIMBOT_DPMM,
+    printableWidthMm,
+  } from "$/utils/print_limits";
   import { logError, logInfo } from "$/utils/app_log";
+  import { resolveLabelType } from "$/utils/printer_profile";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import { canvasPreprocess } from "$/utils/canvas_preprocess";
@@ -118,6 +131,27 @@
   const labelTypeTranslationKey = (labelType: string): TranslationKey =>
     `preview.label_type.${labelType}` as TranslationKey;
 
+  /**
+   * The label type the print is actually run with.
+   *
+   * The printer is told which kind of stock it has, because it needs to know
+   * whether to look for gaps. It only understands the kinds in its own
+   * capability list, and a kind it does not understand makes it try to write
+   * an RFID tag that is not there — which comes back as "WriteRfidFail" and
+   * the print never starts.
+   *
+   * So the type is always one the printer understands. The roll's own tag is
+   * the best evidence of what is loaded, and the user's choice is honoured
+   * when it is a kind the printer can do.
+   */
+  const printLabelType = $derived(
+    resolveLabelType(
+      $printerProfile,
+      $rfidInfo.labelRfidInfo?.consumablesType,
+      params.labelType,
+    ),
+  );
+
   const endPrint = async () => {
     clearInterval(statusTimer);
 
@@ -172,7 +206,7 @@
       totalPages: pagesTotal * params.quantity,
       density: params.density,
       speed: params.speed,
-      labelType: params.labelType,
+      labelType: printLabelType,
       statusPollIntervalMs: 100,
       statusTimeoutMs: 8_000,
       pageColor: PageColorType.SingleColor,
@@ -322,24 +356,17 @@
     }
 
 
-    let headSize = -1;
-
-    if ($printerInfo?.printheadWidth !== undefined) {
-      headSize = $printerInfo.printheadWidth;
-    } else if ($printerMeta?.printheadPixels !== undefined) {
-      headSize = $printerMeta.printheadPixels;
-    }
-
     // The device limit blocks the print; the model's limit warns, because a
     // wider printer will still print it.
-    // The preview is rendered at the printer's own resolution, so the width
-    // it measures is in dots. It is put back into the app's canvas pixels
-    // before it is compared with a head width, which is always in those.
+    //
+    // Both sides are in millimetres: the raster is measured in the template's
+    // own pixels and converted with the template's resolution, and the print
+    // head is quoted in the printer's dots and converted with the printer's.
+    // Comparing pixels across those two would block labels that fit.
     const evaluation = evaluateWidth(
-      printableWidth(previewCanvas, labelProps.printDirection),
-      NIIMBOT_DPMM,
-      headSize === -1 ? undefined : headSize,
-      headWidthForModel(model),
+      printableWidthMm(previewCanvas, labelProps.printDirection, labelProps.dpmm),
+      $printerProfile?.headMm,
+      headMmForModel(model),
     );
 
     widthBlocked = evaluation.blocked === undefined ? "" : $tr("params.label.warning.width") + " " + evaluation.blocked;
@@ -560,8 +587,15 @@
       params.offset = { ...labelProps.offset };
     }
 
-    if ($rfidInfo.labelRfidInfo?.consumablesType) {
-      params.labelType = $rfidInfo.labelRfidInfo.consumablesType;
+    // The roll's tag says what is loaded, but only the printer's own
+    // capability list decides what may be sent — see printLabelType.
+    if ($rfidInfo.labelRfidInfo?.consumablesType !== undefined) {
+      const fromRoll = resolveLabelType(
+        $printerProfile,
+        $rfidInfo.labelRfidInfo.consumablesType,
+        undefined,
+      );
+      params.labelType = fromRoll;
     }
 
     loadProps();
@@ -965,10 +999,16 @@
         onchange={() => updateSavedProp("labelType", params.labelType)}>
         {#each Object.values(LabelType) as lt (lt)}
           {#if typeof lt !== "string"}
-            <option value={lt}>
-              {#if $printerMeta?.paperTypes.includes(lt)}✔{/if}
-              {$tr(labelTypeTranslationKey(LabelType[lt]))}
-            </option>
+            <!--
+              Only the kinds the printer understands are offered: one it does
+              not know makes it try to write an RFID tag that is not there.
+            -->
+            {#if $printerProfile === undefined || $printerProfile.paperTypes.includes(lt)}
+              <option value={lt}>
+                {#if $printerMeta?.paperTypes.includes(lt)}✔{/if}
+                {$tr(labelTypeTranslationKey(LabelType[lt]))}
+              </option>
+            {/if}
           {/if}
         {/each}
       </select>

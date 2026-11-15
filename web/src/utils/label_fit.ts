@@ -236,3 +236,44 @@ export const adaptContentToLabel = (
 
   return { factor, rotated: turned };
 };
+
+/**
+ * Turn a design a quarter turn, the way a change of printer turns it.
+ *
+ * The two printer families feed the label differently: one takes it the long
+ * way round, the other the short way. A design drawn for one is the other
+ * turned a quarter. So when a design moves to the other family, the canvas
+ * is transposed and the content is turned with it — otherwise the design
+ * would come out of the printer sideways.
+ *
+ * The content is not rescaled: the label is the same size, only the way it
+ * is held has changed.
+ */
+export const turnContent = (
+  objects: fabric.FabricObject[],
+  size: { width: number; height: number },
+): { width: number; height: number } => {
+  const cx = size.width / 2;
+  const cy = size.height / 2;
+
+  // The turned canvas is the other way round, so its centre is elsewhere.
+  const ncx = size.height / 2;
+  const ncy = size.width / 2;
+
+  for (const obj of objects) {
+    obj.rotate((obj.angle ?? 0) + 90);
+
+    const centre = obj.getCenterPoint();
+    const dx = centre.x - cx;
+    const dy = centre.y - cy;
+
+    obj.set({
+      left: (obj.left ?? 0) + (cx - dy - centre.x) + (ncx - cx),
+      top: (obj.top ?? 0) + (cy + dx - centre.y) + (ncy - cy),
+    });
+
+    obj.setCoords();
+  }
+
+  return { width: size.height, height: size.width };
+};
