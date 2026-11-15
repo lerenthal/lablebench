@@ -87,6 +87,46 @@
  * than a bright one, and the shadows are brown-grey so they read as paper
  * rather than as a drop shadow on glass.
  */
+/*
+ * The immersive theme.
+ *
+ * A near-black workbench with a single cyan accent, hairline borders and a
+ * tight type scale. The app is a tool for working on a black-and-white
+ * label, so the chrome around it stays out of the way: one accent colour,
+ * one border colour, and everything else is a shade of the background.
+ *
+ * It sits above the default palette and below the light one, so the light
+ * theme still wins when the workstation asks for it.
+ */
+:root {
+  --lb-bg: #0d0d0d;
+  --lb-bg-grad: radial-gradient(1200px 620px at 20% -12%, #15181c 0%, transparent 58%),
+    radial-gradient(900px 520px at 92% 108%, #101a1d 0%, transparent 55%);
+  --lb-surface: #161616;
+  --lb-surface-raised: #1e1e1e;
+  --lb-surface-sunken: #0a0a0a;
+  --lb-surface-hover: #262626;
+  --lb-border: #2a2a2a;
+  --lb-border-strong: #3a3a3a;
+  --lb-text: #e5e5e5;
+  --lb-text-muted: #9aa0a6;
+  --lb-text-faint: #6b7280;
+  --lb-accent: #06b6d4;
+  --lb-accent-hover: #22d3ee;
+  --lb-accent-soft: rgba(6, 182, 212, 0.12);
+  --lb-accent-contrast: #062126;
+  --lb-danger: #ff5c5c;
+  --lb-danger-soft: rgba(255, 92, 92, 0.14);
+  --lb-success: #4ade80;
+  --lb-radius-sm: 4px;
+  --lb-radius: 6px;
+  --lb-radius-lg: 10px;
+  --lb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --lb-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  --lb-shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.6);
+  --lb-ring: 0 0 0 3px rgba(6, 182, 212, 0.25);
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     --lb-bg: #f7f5f2;
@@ -101,9 +141,9 @@
     --lb-text: #232019;
     --lb-text-muted: #6b6459;
     --lb-text-faint: #948c80;
-    --lb-accent: #2f5fd0;
-    --lb-accent-hover: #24499f;
-    --lb-accent-soft: rgba(47, 95, 208, 0.1);
+    --lb-accent: #0e7490;
+    --lb-accent-hover: #0b5c73;
+    --lb-accent-soft: rgba(14, 116, 144, 0.1);
     --lb-accent-contrast: #ffffff;
     --lb-danger: #c0392b;
     --lb-danger-soft: rgba(192, 57, 43, 0.1);
@@ -111,7 +151,7 @@
     --lb-shadow-sm: 0 1px 2px rgba(74, 60, 38, 0.07);
     --lb-shadow: 0 8px 26px rgba(74, 60, 38, 0.1);
     --lb-shadow-lg: 0 26px 60px rgba(74, 60, 38, 0.16);
-    --lb-ring: 0 0 0 3px rgba(47, 95, 208, 0.22);
+    --lb-ring: 0 0 0 3px rgba(14, 116, 144, 0.22);
   }
 }
 
@@ -531,4 +571,217 @@ label {
 
 .fs-08 {
   font-size: 0.8rem;
+}
+
+/* ==========================================================================
+   The chrome.
+
+   The geometry and the feel of the interface: hairline borders, a tight
+   type scale, controls that fill on hover rather than lift, and a scrollbar
+   that stays out of the way.
+
+   Only the tokens are used here, so the light theme gets the same chrome.
+   ========================================================================== */
+
+/* --- the scrollbar --------------------------------------------------------- */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--lb-surface-sunken);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--lb-border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--lb-text-faint);
+}
+
+/* --- the controls ---------------------------------------------------------- */
+
+.btn {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-secondary {
+  --bs-btn-bg: transparent;
+  --bs-btn-border-color: var(--lb-border);
+  --bs-btn-color: var(--lb-text-muted);
+  --bs-btn-hover-bg: var(--lb-surface-hover);
+  --bs-btn-hover-border-color: var(--lb-border-strong);
+  --bs-btn-hover-color: var(--lb-text);
+  --bs-btn-active-bg: var(--lb-accent-soft);
+  --bs-btn-active-border-color: var(--lb-accent);
+  --bs-btn-active-color: var(--lb-accent);
+  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-border-color: var(--lb-border);
+  --bs-btn-disabled-color: var(--lb-text-faint);
+}
+
+.btn-outline-secondary {
+  --bs-btn-bg: transparent;
+  --bs-btn-border-color: var(--lb-border);
+  --bs-btn-color: var(--lb-text-muted);
+  --bs-btn-hover-bg: var(--lb-surface-hover);
+  --bs-btn-hover-border-color: var(--lb-border-strong);
+  --bs-btn-hover-color: var(--lb-text);
+  --bs-btn-active-bg: var(--lb-accent-soft);
+  --bs-btn-active-border-color: var(--lb-accent);
+  --bs-btn-active-color: var(--lb-accent);
+  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-border-color: var(--lb-border);
+  --bs-btn-disabled-color: var(--lb-text-faint);
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--lb-accent);
+  --bs-btn-border-color: var(--lb-accent);
+  --bs-btn-color: var(--lb-accent-contrast);
+  --bs-btn-hover-bg: var(--lb-accent-hover);
+  --bs-btn-hover-border-color: var(--lb-accent-hover);
+  --bs-btn-hover-color: var(--lb-accent-contrast);
+  --bs-btn-active-bg: var(--lb-accent-hover);
+  --bs-btn-active-border-color: var(--lb-accent-hover);
+  --bs-btn-active-color: var(--lb-accent-contrast);
+}
+
+.form-control,
+.form-select {
+  background-color: var(--lb-surface-raised);
+  border-color: var(--lb-border);
+  border-radius: var(--lb-radius-sm);
+  color: var(--lb-text);
+  font-size: var(--lb-text-sm);
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: var(--lb-surface-raised);
+  border-color: var(--lb-accent);
+  box-shadow: var(--lb-ring);
+  color: var(--lb-text);
+}
+
+.form-control::placeholder {
+  color: var(--lb-text-faint);
+}
+
+/* --- the slider ------------------------------------------------------------ */
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  background: var(--lb-border-strong);
+  border-radius: 2px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--lb-accent);
+  margin-top: -5px;
+  cursor: pointer;
+  box-shadow: 0 0 4px var(--lb-accent-soft);
+}
+
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--lb-ring);
+}
+
+/* --- the app bar ----------------------------------------------------------- */
+
+.app-bar {
+  background: var(--lb-surface);
+  border-bottom: 1px solid var(--lb-border);
+  box-shadow: none;
+}
+
+.app-bar__mark {
+  background: var(--lb-accent);
+  border-radius: var(--lb-radius);
+  color: var(--lb-accent-contrast);
+}
+
+.app-bar__name {
+  letter-spacing: -0.01em;
+}
+
+/* --- the status bar -------------------------------------------------------- */
+
+.app-footer {
+  background: var(--lb-surface);
+  border-top: 1px solid var(--lb-border);
+  color: var(--lb-text-faint);
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
+}
+
+.app-footer a {
+  color: var(--lb-text-faint);
+}
+
+/* --- the small uppercase label --------------------------------------------- */
+
+.micro-label {
+  color: var(--lb-text-faint);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.mono {
+  font-family: var(--lb-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the status bar -------------------------------------------------------- */
+
+.app-status__link {
+  align-items: center;
+  color: var(--lb-text-faint);
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.app-status__link--on {
+  color: var(--lb-text-muted);
+}
+
+.app-status__dot {
+  background: var(--lb-text-faint);
+  border-radius: 50%;
+  height: 6px;
+  width: 6px;
+}
+
+.app-status__dot--on {
+  animation: app-status-pulse 2.4s ease-in-out infinite;
+  background: var(--lb-success);
+}
+
+@keyframes app-status-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+
+  50% {
+    box-shadow: 0 0 0 3px var(--lb-surface-hover);
+  }
 }
