@@ -32,3 +32,7 @@ dist/
 # Backups taken by scripts/backup.sh. They are copies of the database and
 # the assets, not source.
 backups/
+
+# Scratch directories used while working out a geometry problem.
+.probe/
+.web/
