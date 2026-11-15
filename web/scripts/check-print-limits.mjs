@@ -5,12 +5,15 @@
  * the real source is exercised, not a copy of it.
  */
 import { build } from "esbuild";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
-const WEB = "/media/yaniv/1tb_WDC/hermes_agent_projects/LabelBench/web";
+// The web directory, worked out from where this script lives rather than
+// from an absolute path: the check has to run wherever the repository is
+// checked out, which is the point of running it at all.
+const WEB = dirname(dirname(fileURLToPath(import.meta.url)));
 const ENTRY = join(WEB, "src/utils/print_limits.ts");
 const outDir = mkdtempSync(join(tmpdir(), "lb-limits-"));
 const outFile = join(outDir, "print_limits.mjs");
