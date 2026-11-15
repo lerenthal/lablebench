@@ -1,7 +1,6 @@
 import * as fabric from "fabric";
 import type { AppConfig, LabelPreset, LabelProps, TemplateModel } from "$/types";
 import { TextboxExt } from "$/fabric-object/textbox-ext";
-import { dymoLabelPresets } from "$/utils/dymo";
 
 export const configureFabric = () => {
   fabric.config.disableStyleCopyPaste = true;
@@ -74,9 +73,6 @@ export const MODEL_LABEL_PRESETS: Record<TemplateModel, LabelPreset[]> = {
     { width: 30, height: 25, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "30 × 25 mm" },
     { width: 30, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "30 × 12 mm" },
   ],
-  // The LabelWriter's sizes come from the driver's own media registry, so
-  // every roll the driver knows about is a size the app offers.
-  dymo450: dymoLabelPresets(),
 };
 
 /** Default canvas dimensions */

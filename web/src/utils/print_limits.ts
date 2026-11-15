@@ -39,12 +39,6 @@ export const headWidthForModel = (model: TemplateModel | undefined): number | un
     return undefined;
   }
 
-  // The LabelWriter is not a NIIMBOT and the library knows nothing about it.
-  // Its head width is in the app's own table.
-  if (MODEL_ENUM[model] === undefined) {
-    return PRINT_HEAD_PIXELS[model];
-  }
-
   const meta = getPrinterMetaByModel(MODEL_ENUM[model]!);
   return meta?.printheadPixels;
 };
@@ -59,11 +53,6 @@ export const densityRangeForModel = (
   model: TemplateModel | undefined,
 ): { min: number; max: number } | undefined => {
   if (model === undefined) {
-    return undefined;
-  }
-
-  if (MODEL_ENUM[model] === undefined) {
-    // The LabelWriter takes a density in its own terms, not the NIIMBOT's.
     return undefined;
   }
 

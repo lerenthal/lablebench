@@ -10,7 +10,7 @@
    * a CSV of the same shape just works.
    */
   import { LabelType, PageColorType, type PrintTaskName } from "@mmote/niimbluelib";
-  import { connectionState, dymoConnection, printerClient, printerInfo, printerKind, printerMeta } from "$/stores/app";
+  import { connectionState, printerClient, printerInfo, printerMeta } from "$/stores/app";
   import AppModal from "$/components/basic/AppModal.svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr } from "$/utils/i18n";
@@ -25,14 +25,12 @@
   } from "$/utils/csv_batch";
   import {
     createBatchControl,
-    dymoSink,
     niimbotSink,
     runBatch,
     type BatchControl,
     type BatchRowState,
   } from "$/utils/batch_printer";
-  import { dymoEngine, dymoGeometry, dymoRenderScale } from "$/utils/dymo";
-  import { DEFAULT_RENDER_PARAMS, renderLabelCanvas, type RenderParams } from "$/utils/label_render";
+    import { DEFAULT_RENDER_PARAMS, renderLabelCanvas, type RenderParams } from "$/utils/label_render";
   import { extractVariablesFromJson } from "$/utils/canvas_preprocess";
   import { headWidthForModel } from "$/utils/print_limits";
   import {
@@ -106,54 +104,28 @@
   /**
    * Which printer this batch goes to.
    *
-   * The two printers are reached in different ways, so the batch is sent to
-   * whichever one is connected, and the label is rendered at that printer's
-   * own resolution.
+   * The NIIMBOT prints at 203 dpi, which is the app's native resolution, so
+   * a canvas pixel is a dot and the label is rendered as it is.
    */
-  const isDymo = $derived($printerKind === "dymo");
-
-  const disconnected = $derived(
-    isDymo ? $dymoConnection === undefined : $connectionState !== "connected",
-  );
-
-  /**
-   * The factor the label is rendered at, for a head that is not 203 dpi.
-   *
-   * It follows the printer that is chosen rather than the printer that
-   * happens to be connected, so the preview is at the right resolution
-   * before the LabelWriter is plugged in.
-   */
-  const renderScale = $derived(
-    isDymo
-      ? dymoRenderScale(
-          $dymoConnection !== undefined ? dymoEngine($dymoConnection) : undefined,
-        )
-      : 1,
-  );
+  const disconnected = $derived($connectionState !== "connected");
 
   /**
    * What the batch will print to.
    *
-   * There are two printer families and they are reached differently, so the
-   * dialog says which one the batch is going to rather than leaving the
-   * user to work it out from the toolbar.
+   * The dialog says which printer the batch is going to rather than leaving
+   * the user to work it out from the toolbar.
    */
   const targetPrinter = $derived(
-    isDymo
-      ? $tr("batch.printer.dymo")
-      : $connectionState === "connected"
-        ? $tr("batch.printer.niim")
-        : $tr("batch.printer.none"),
+    $connectionState === "connected" ? $tr("batch.printer.niim") : $tr("batch.printer.none"),
   );
 
   /**
    * The head width of the connected printer, in the app's canvas pixels.
    *
-   * A LabelWriter's head is known from its model rather than reported over
-   * the wire, the way a NIIMBOT reports its own.
+   * A NIIMBOT reports its own head width over the wire.
    */
   const deviceHeadWidth = $derived(
-    isDymo ? PRINT_HEAD_PIXELS.dymo450 : $printerInfo?.printheadWidth ?? $printerMeta?.printheadPixels,
+    $printerInfo?.printheadWidth ?? $printerMeta?.printheadPixels,
   );
   const totalPages = $derived(Math.max(1, Math.ceil(rows.length / pageSize)));
   const currentPageRows = $derived(rows.slice(page * pageSize, page * pageSize + pageSize));
@@ -277,7 +249,6 @@
       labelProps,
       resolvedFor(rows[index]!, index),
       { ...DEFAULT_RENDER_PARAMS, postProcess: dithering },
-      renderScale,
     );
 
     // The rendered canvas is detached and its size is not known until it is
@@ -331,31 +302,20 @@
     control = createBatchControl();
 
     try {
-      // The batch goes to whichever printer is connected. The two are
-      // reached differently, so each gets its own sink — but the runner, the
-      // serial allocation and the row reporting are the same for both.
+      // The transport is behind the sink, so the runner, the serial
+      // allocation and the row reporting stay the same whatever it is.
       const totalCopies = targets.reduce((sum, target) => sum + copiesPerRow, 0);
 
-      const sink = isDymo
-        ? dymoSink({
-            connection: $dymoConnection!,
-            geometry: dymoGeometry({
-              canvasWidth: labelProps.size.width,
-              canvasHeight: labelProps.size.height,
-              printDirection: rotation,
-              engine: dymoEngine($dymoConnection!),
-            }),
-          })
-        : niimbotSink({
-            client: $printerClient!,
-            printTaskName,
-            density,
-            labelType: LabelType.WithGaps,
-            speed: 1,
-            pageColor: PageColorType.SingleColor,
-            printDirection: rotation,
-            totalCopies,
-          });
+      const sink = niimbotSink({
+        client: $printerClient!,
+        printTaskName,
+        density,
+        labelType: LabelType.WithGaps,
+        speed: 1,
+        pageColor: PageColorType.SingleColor,
+        printDirection: rotation,
+        totalCopies,
+      });
 
       const results = await runBatch(
         {
@@ -365,7 +325,6 @@
           renderParams: { ...DEFAULT_RENDER_PARAMS, postProcess: dithering },
           serialConfig:
             serialEnabled && serialVariable !== "" ? serialConfig() : undefined,
-          renderScale,
           headWidth: deviceHeadWidth,
           modelHeadWidth: headWidthForModel(template.model),
         },

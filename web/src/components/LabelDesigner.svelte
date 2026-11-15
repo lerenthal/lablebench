@@ -983,13 +983,6 @@
                 onclick={() => onModelChanged("b21")}>
                 B21
               </button>
-              <button
-                class="btn btn-outline-secondary"
-                class:active={templateModel === "dymo450"}
-                onclick={() => onModelChanged("dymo450")}
-                title={$tr("templates.dymo450")}>
-                Dymo 450
-              </button>
             </div>
           </div>
         </div>

@@ -24,8 +24,6 @@
     "@formatjs/intl-localematcher": "^0.8.10",
     "@mmote/niimbluelib": "0.49.1",
     "@popperjs/core": "^2.11.8",
-    "@thermal-label/labelwriter-core": "^0.6.4",
-    "@thermal-label/labelwriter-web": "^0.6.4",
     "bootstrap": "5.3.8",
     "d3-dsv": "^3.0.1",
     "dayjs": "^1.11.21",

@@ -26,7 +26,6 @@ import {
   type PrintTaskName,
 } from "@mmote/niimbluelib";
 import { renderLabelCanvas, type RenderParams } from "$/utils/label_render";
-import { printDymoLabel, type DymoConnection, type DymoGeometry } from "$/utils/dymo";
 import { allocateSerialValues } from "$/utils/dynamic_values";
 import type { SerialConfig } from "$/types";
 import { evaluateWidth, printableWidth } from "$/utils/print_limits";
@@ -46,12 +45,10 @@ export type BatchRowState = {
 /**
  * Where a batch's labels go.
  *
- * The two printers are reached in entirely different ways — a NIIMBOT over
- * Bluetooth or serial with a print task that takes a stream of pages, a
- * LabelWriter over USB with a bitmap per label — so the transport is kept
- * behind this and the runner itself stays the same for both. One runner
- * means the serial allocation, the per-row error handling and the
- * pause and cancel behaviour cannot differ between the printers.
+ * The transport is kept behind this, so the runner itself does not know how
+ * a label reaches the printer. The runner owns the serial allocation, the
+ * per-row error handling and the pause and cancel behaviour, and the sink
+ * owns the sending.
  */
 export interface BatchSink {
   /** Prepare the printer for the batch. */
@@ -79,13 +76,6 @@ export type BatchPrinterOptions = {
   fabricJson: FabricJson;
   labelProps: LabelProps;
   renderParams: RenderParams;
-  /**
-   * How much to render the label up by.
-   *
-   * A LabelWriter burns 300 dpi and the template is in 203 dpi pixels, so
-   * the label is rendered afresh at the head's own resolution.
-   */
-  renderScale?: number;
   /** Print head width in pixels. Rows wider than this are rejected, never sent. */
   headWidth?: number;
   /** The head width of the model the template targets. Rows wider than this are flagged, not rejected. */
@@ -190,35 +180,6 @@ export const niimbotSink = (options: NiimbotSinkOptions): BatchSink => {
   };
 };
 
-/** What a LabelWriter batch needs to know about its printer. */
-export type DymoSinkOptions = {
-  connection: DymoConnection;
-  geometry: DymoGeometry;
-};
-
-/**
- * A sink that prints to a DYMO LabelWriter.
- *
- * The LabelWriter takes one bitmap at a time and has no notion of several
- * copies in a single command, so the copies are printed one after another.
- */
-export const dymoSink = (options: DymoSinkOptions): BatchSink => ({
-  open: async () => {
-    // Nothing to prepare: the connection is already open and the media is
-    // known from the geometry.
-  },
-
-  printLabel: async (canvas, copies) => {
-    for (let copy = 0; copy < copies; copy++) {
-      await printDymoLabel(options.connection, canvas, options.geometry);
-    }
-  },
-
-  close: async () => {
-    // The connection is the browser's and is kept open between batches.
-  },
-});
-
 export type BatchCallbacks = {
   onRowUpdate?: (row: BatchRowState) => void;
   onProgress?: (percent: number) => void;
@@ -271,10 +232,6 @@ export async function runBatch(
 
   const sink = options.sink;
 
-  // The label is rendered at the head's own resolution when the head is not
-  // the template's resolution.
-  const scale = options.renderScale ?? 1;
-
   const stopListening = sink.onProgress?.((percent) => {
     callbacks.onProgress?.(percent);
   });
@@ -315,7 +272,6 @@ export async function runBatch(
             options.labelProps,
             variables,
             options.renderParams,
-            scale,
           );
 
           // §5.1: never send an over-wide raster. Reject the row with a clear
@@ -325,7 +281,7 @@ export async function runBatch(
           // into the app's canvas pixels before it is compared with a head
           // width, which is always in those.
           const evaluation = evaluateWidth(
-            printableWidth(canvas, options.labelProps.printDirection) / scale,
+            printableWidth(canvas, options.labelProps.printDirection),
             options.headWidth,
             options.modelHeadWidth,
           );

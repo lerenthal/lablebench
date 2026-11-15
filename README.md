@@ -1,12 +1,12 @@
 # LabelBench
 
 A self-hosted label-design web app with **browser-direct** printing to NIIMBOT
-and DYMO LabelWriter printers.
+printers.
 
 One installation on a central lab server. Any Chromium browser on the LAN opens
 it, designs or opens shared label templates, and prints to a printer
-**physically plugged into that same workstation** — over Web Bluetooth (D11),
-Web Serial (B21/USB) or WebUSB (DYMO LabelWriter 450).
+**physically plugged into that same workstation** — over Web Bluetooth (D11) or
+Web Serial (B21/USB).
 
 The printer moves. The templates do not: they live on the server, so every
 station sees the same library and nothing is copied between machines.
@@ -16,14 +16,12 @@ station sees the same library and nothing is copied between machines.
  ┌────────────────┐                      ┌─────────────┐               ┌────────────────┐
  │ Chromium       │  https://labelbench  │ SPA + REST  │               │ Chromium       │
  │  + Web Serial  │◄────────────────────►│ API         │               │  + Web Bluetooth│
- │  + Web Bluetooth│   (trusted origin)  │ SQLite      │               │  + WebUSB      │
- │  + WebUSB      │                      │ assets/     │               │                │
+ │  + Web Bluetooth│   (trusted origin)  │ SQLite      │               │                │
  │                │                      │ assets/     │               │                │
  │  ┌──────────┐  │                      └─────────────┘               │  ┌──────────┐  │
  │  │ NIIMBOT  │  │                                                    │  │ NIIMBOT  │  │
- │  │ or DYMO  │  │                      templates + assets             │  │ printer  │  │
- │  │ printer  │  │                        shared                      │  └──────────┘  │
- │  └──────────┘  │                                                    │                │
+ │  │ printer  │  │                      templates + assets             │  │ printer  │  │
+ │  └──────────┘  │                        shared                      │  └──────────┘  │
  └────────────────┘                                                    └────────────────┘
 ```
 
@@ -40,7 +38,6 @@ The server never touches a printer.
 - [Certificate setup](#certificate-setup)
 - [Trusting the CA on a workstation](#trusting-the-ca-on-a-workstation)
 - [Adding the printer on a new workstation](#adding-the-printer-on-a-new-workstation)
-- [Printing with a DYMO LabelWriter](#printing-with-a-dymo-labelwriter)
 - [Designing a template](#designing-a-template)
 - [Running a CSV batch](#running-a-csv-batch)
 - [Backup and restore](#backup-and-restore)
@@ -69,8 +66,7 @@ The server never touches a printer.
   duplication and version history
 - **CSV batch printing** — import a CSV, bind its columns to the template's
   variables, preview the merged rows, then print them one after another with
-  progress, per-row success/failure, pause and cancel. **Runs on both printer
-  families**, including the DYMO LabelWriter
+  progress, per-row success/failure, pause and cancel
 - **Preflight check** — finds everything that would make a printed label wrong:
   text that overflows, text too small to read, low contrast, an object off the
   label, text hidden under another object, an empty text object, a variable
@@ -109,8 +105,8 @@ Safari cannot do Web Bluetooth or Web Serial. No software is installed on a
 workstation; the only per-machine steps are trusting the CA once and granting
 the printer once.
 
-**Printers** — a NIIMBOT D11 (BLE, 96 px print head), a B21 / B1 (USB CDC-ACM,
-384 px print head), or a DYMO LabelWriter 450 (USB, 672 dots at 300 dpi).
+**Printers** — a NIIMBOT D11 (BLE, 96 px print head) or a B21 / B1 (USB
+CDC-ACM, 384 px print head).
 
 ---
 
@@ -421,7 +417,7 @@ the certificate carries the address as a SAN and the server answers on both.
 
 > **Chrome on Linux does not implement Web Bluetooth.** `navigator.bluetooth`
 > is `undefined` there, so a D11 — which connects over Bluetooth — needs a
-> Windows, macOS or ChromeOS workstation. The LabelWriter goes over USB and
+> Windows, macOS or ChromeOS workstation. A B21 or B1 goes over USB serial and
 > works from Chrome on Linux. Measured on the reference host with Chrome 157.
 
 
@@ -444,17 +440,15 @@ The printer moves between machines. Each workstation pairs with it once; the
 grant is remembered by the browser per origin, so after that the printer
 reconnects in one click.
 
-1. Plug the printer into the workstation (USB for a B21/B1 or a LabelWriter, or
-   pair it over Bluetooth for a D11).
+1. Plug the printer into the workstation (USB for a B21/B1, or pair it over
+   Bluetooth for a D11).
 2. Open `https://labelbench.local:8443` in Chrome or Edge.
 3. Click **Connect printer**, choose the printer family in the app bar, then
    press the connect button next to it:
    - **Web Bluetooth** — for a D11. Pick the device from the browser's chooser.
    - **Web Serial (USB)** — for a B21/B1. Pick the serial port from the
      browser's chooser.
-   - **WebUSB (USB)** — for a DYMO LabelWriter. Pick the printer from the
-     browser's chooser.
-4. The model is detected automatically (`D11`, `B21`, `B1`, `LabelWriter 450`, …)
+4. The model is detected automatically (`D11`, `B21`, `B1`, …)
    and shown next to the connection, along with battery and paper status where
    the printer reports it.
 5. Print a test label from the template gallery.
@@ -465,49 +459,7 @@ per origin.
 
 ---
 
-## Printing with a DYMO LabelWriter
-
-The LabelWriter family is a **raster** printer: the host sends rows of dots,
-not a label language. It is reached over WebUSB through the open-source
-`thermal-label/labelwriter` driver (MIT). There is no vendor driver, no
-native helper and no cloud call.
-
-**The resolution difference.** The NIIMBOT prints at 203 dpi and the app's
-label canvas is in device pixels at 203 dpi, so a canvas pixel is a dot. The
-LabelWriter prints at 300 dpi, so one canvas pixel is worth 1.476 dots.
-
-That is not a reason to change the template format. A label stays in canvas
-pixels at 203 dpi; at print time it is **re-rendered** at the LabelWriter's own
-resolution rather than enlarged from a smaller bitmap, so the text is
-rasterised at the resolution the head will burn instead of being blown up.
-
-**The label sizes** come from the driver's own media registry, so a roll the
-driver knows about is a size the app offers. Set the model to **Dymo 450** in
-the designer to get them.
-
-**Linux needs one rule before the browser can open it.** The browser's USB
-picker grants permission, but the operating system still has to let the
-browser open the device. A LabelWriter declares itself as a printer, so udev
-hands its device node to the printer group — and a browser running as a
-desktop user is usually in the printer *admin* group rather than the printer
-group, so the node is read-only for it. The result is:
-
-```
-SecurityError: Failed to execute 'open' on 'USBDevice': Access denied.
-```
-
-The fix is a rule that gives the device to the hardware group:
-
-```bash
-sudo cp deploy/udev/60-labelbench-labelwriter.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules
-sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0922
-```
-
-Then unplug the printer and plug it back in. The app says exactly this when
-it hits the refusal, with the commands to copy.
-
-**The grant is per origin.** The browser remembers the printer per origin, so
+## The grant is per origin The browser remembers the printer per origin, so
 a printer granted at `https://labelbench.local:8443` is not granted at
 `https://10.10.17.185:8443` — the two are different origins to the browser.
 Connect on the same address you print on.
@@ -523,19 +475,9 @@ A printer answers the connection handshake, so it can be recognised. When a
 chosen port turns out not to have a printer on it, the other granted ports
 are asked, and the app says which one is the printer and what model it is.
 
-**The dead zone.** The printer feeds through 6 mm at the start of the media
-before the label begins. The app takes that figure from the driver, subtracts it
-from the label size, and the printer is told the real feed length so the cut
-lands where it should.
-
-> The 6 mm figure and the media sizes come from the driver's registry. They are
-> right for the roll they describe, but they have not been checked against a
-> physical roll — see [docs/DYMO-support-assessment.md](docs/DYMO-support-assessment.md)
-> for what still needs a bench test.
-
-**Batch printing works the same as on a NIIMBOT.** The batch dialog says which
-printer it is going to, and a CSV batch, a serial sequence and a barcode that
-follows the serial all work the same way on either printer.
+**Batch printing.** The batch dialog says which printer it is going to, and a
+CSV batch, a serial sequence and a barcode that follows the serial all work
+the same way on either printer.
 
 On Linux, the user running the browser must be able to open the serial device:
 
@@ -755,14 +697,12 @@ LabelBench/
 ├── deploy/
 │   ├── caddy/           Caddyfile + certificates
 │   ├── systemd/         bare-metal unit
-│   ├── udev/            the rule that lets the browser open a LabelWriter
 │   └── prepare-host.sh  the clean-server preparation script
 ├── scripts/
 │   ├── setup-certs.sh   the internal CA
 │   └── backup.sh        an online-safe database and asset backup
 ├── docs/
 │   ├── AUDIT-niimblue.md           the fork-vs-rebuild decision
-│   ├── DYMO-support-assessment.md   the LabelWriter: what is built, what needs a bench test
 │   ├── M0-viability-report.md       the first feasibility findings
 │   └── PRODUCTION-INSTALL.md        the full production guide
 ├── tools/bin/           mkcert + caddy binaries (no root needed)
@@ -779,6 +719,5 @@ them instead of re-deriving the audit.
 | Document | What it covers |
 |---|---|
 | [docs/PRODUCTION-INSTALL.md](docs/PRODUCTION-INSTALL.md) | The full production guide: installation, CA trust, the API key, backup and restore, upgrades, troubleshooting |
-| [docs/DYMO-support-assessment.md](docs/DYMO-support-assessment.md) | The LabelWriter: the architecture, the media sizes, and what still needs a physical roll |
 | [docs/AUDIT-niimblue.md](docs/AUDIT-niimblue.md) | Why the app is built on niimblue rather than from scratch |
 | [docs/M0-viability-report.md](docs/M0-viability-report.md) | The first feasibility findings: API, TLS, browser support, print limits, persistence |

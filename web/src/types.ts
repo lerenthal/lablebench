@@ -38,17 +38,12 @@ export const CsvParamsSchema = z.object({
  * Target printer model (§5.1 / §7).
  * `d11` = 96 px print head, `b21` = 384 px print head, both at 203 dpi (8 px/mm).
  */
-export const TemplateModelSchema = z.enum(["d11", "b21", "dymo450"]);
+export const TemplateModelSchema = z.enum(["d11", "b21"]);
 export type TemplateModel = z.infer<typeof TemplateModelSchema>;
 
 export const PRINT_HEAD_PIXELS: Record<TemplateModel, number> = {
   d11: 96,
   b21: 384,
-  // The LabelWriter 450's head is 672 dots at 300 dpi, which is 56.9 mm —
-  // 455.2 pixels at the app's native 8 px/mm. A "57 mm" medium is the same
-  // head, rounded, and lands on 456 pixels; the compositor clamps it back
-  // to the head.
-  dymo450: 456,
 };
 
 /** A declared merge variable (§5.2). */

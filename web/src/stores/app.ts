@@ -28,7 +28,6 @@ import { LocalStoragePersistence, writablePersisted } from "$/utils/persistence"
 import { APP_CONFIG_DEFAULTS, CSV_DEFAULT, OBJECT_DEFAULTS_TEXT } from "$/defaults";
 import z from "zod";
 import { FileUtils } from "$/utils/file_utils";
-import { type DymoConnection } from "$/utils/dymo";
 
 export const fontCache = writable<string[]>([OBJECT_DEFAULTS_TEXT.fontFamily]);
 export const appConfig = writablePersisted<AppConfig>("config", AppConfigSchema, APP_CONFIG_DEFAULTS);
@@ -37,17 +36,6 @@ export const userFonts = writablePersisted<UserFont[]>("user_fonts", z.array(Use
 export const loadedFonts = writable<FontFace[]>([]);
 
 export const connectionState = writable<ConnectionState>("disconnected");
-/**
- * Which family of printer is connected.
- *
- * The two families have nothing in common below the label: a NIIMBOT is
- * driven over Bluetooth or serial and takes an encoded raster, a LabelWriter
- * is driven over WebUSB and takes a bitmap. So the app knows which one it
- * is talking to, rather than trying to be clever with one path for both.
- */
-export const printerKind = writable<"niim" | "dymo">("niim");
-/** The open LabelWriter, when that is what is connected. */
-export const dymoConnection = writable<DymoConnection | undefined>(undefined);
 export const connectedPrinterName = writable<string>("");
 export const printerClient = writable<NiimbotAbstractClient>();
 export const heartbeatData = writable<HeartbeatData>();
