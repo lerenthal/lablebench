@@ -610,6 +610,28 @@ creates a second one and installs that instead. The workstation then trusts a
 CA that never signed the server certificate, and the browser still warns.
 Copying `rootCA.pem` directly avoids the problem entirely.
 
+### A workstation that has never opened the app
+
+The plain HTTP port is the way in. It serves the root CA and a setup page
+over plain HTTP — so a workstation that does not trust the certificate yet can
+still reach the page that tells it how to trust it.
+
+| Address | Serves |
+|---|---|
+| `http://<host>:8082/` | the setup page, with this deployment's addresses filled in |
+| `http://<host>:8082/setup` | the same page |
+| `http://<host>:8082/rootCA.pem` | the root CA, with no trust required |
+| everything else | a redirect to the same address over HTTPS |
+
+The redirect keeps the address the client used. A workstation that reached the
+server by IP is sent to the IP, not to the hostname — a machine that cannot
+resolve the mDNS name across a switch would otherwise be sent to a name it
+cannot resolve, and a server that was reachable a moment earlier would look
+broken.
+
+The setup page is a Go template rendered by Caddy, so it always carries the
+addresses of the deployment it belongs to.
+
 ### The printer
 
 > The browser remembers the printer per **origin**. A printer granted at

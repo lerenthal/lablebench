@@ -83,10 +83,62 @@
 	}
 }
 
-# Plain HTTP exists only to redirect to HTTPS.
-http://{$LABELBENCH_HOST:labelbench.local}, http://{$LABELBENCH_IP:10.10.17.185} {
-	# The redirect names the external HTTPS port explicitly. {host} would carry
-	# the HTTP port the client actually reached, and redirecting to that would
-	# send the browser to a plain-HTTP port over HTTPS.
-	redir https://{$LABELBENCH_HOST:labelbench.local}:{$LABELBENCH_HTTPS_PORT:8443}{uri} permanent
+# Plain HTTP is the way in.
+#
+# Each address redirects to its OWN HTTPS counterpart. A workstation that
+# reached the server by address must not be sent to the hostname: a machine
+# that cannot resolve the mDNS name across a switch would be sent to a name
+# it cannot resolve, and the server — which was reachable by address a
+# moment earlier — would look broken.
+#
+# The redirect names the external HTTPS port explicitly. {host} would carry
+# the HTTP port the client actually reached, and redirecting to that would
+# send the browser to a plain-HTTP port over HTTPS.
+#
+# Two things are served here rather than redirected, because a workstation
+# that cannot trust the certificate yet has nowhere else to go:
+#
+#   - the root CA, so the certificate can be fetched before it is trusted
+#   - a setup page, which says what to do and carries the commands to do it
+(setup) {
+	route {
+		# The CA's public certificate is not a secret — publishing it is the
+		# point of having one.
+		handle /rootCA.pem {
+			root * /etc/caddy/lab/certs
+			rewrite * /rootCA.pem
+			file_server
+		}
+
+		# The setup page, with the addresses of this deployment filled in.
+		#
+		# The templates module is part of Caddy itself, and it rewrites the
+		# file as it is written — so the page carries the real address of
+		# this server rather than a placeholder someone has to fill in.
+		handle /setup* {
+			root * /etc/caddy/lab
+			rewrite * /setup.html
+			templates
+			file_server
+		}
+
+		# The plain address lands on the setup page rather than on a
+		# redirect to a certificate the browser does not trust yet.
+		handle / {
+			root * /etc/caddy/lab
+			rewrite * /setup.html
+			templates
+			file_server
+		}
+
+		redir https://{args[0]}:{env.LABELBENCH_HTTPS_PORT}{uri} permanent
+	}
+}
+
+http://{$LABELBENCH_HOST:labelbench.local} {
+	import setup {$LABELBENCH_HOST:labelbench.local}
+}
+
+http://{$LABELBENCH_IP:10.10.17.185} {
+	import setup {$LABELBENCH_IP:10.10.17.185}
 }

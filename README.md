@@ -248,6 +248,13 @@ One time per machine. The server publishes its root CA at
 `https://labelbench.local:8443/rootCA.pem`, so a new workstation needs no `scp` and
 no file handoff — just a download.
 
+> **The short way:** open `http://10.10.17.185:8082/` in the browser on the new
+> machine. It serves a setup page with the certificate, the fingerprint, the
+> commands for each operating system and the address to open the app at — and
+> it works over plain HTTP, so it works on a machine that does not trust the
+> certificate yet. That is the point: a workstation that cannot trust the
+> certificate has no way to reach a page that tells it how to trust it.
+
 **Linux**
 
 ```bash
@@ -273,6 +280,18 @@ it as an IP SAN and the server answers on both:
 ```bash
 curl -k https://10.10.17.185:8443/rootCA.pem -o rootCA.pem
 ```
+
+Or over plain HTTP, which needs no trust at all and so cannot be blocked by
+the very thing you are fixing:
+
+```bash
+curl -O http://10.10.17.185:8082/rootCA.pem
+```
+
+**The address a workstation uses is the one it must keep using.** The browser's
+grants — for Bluetooth and for serial — are per origin, so a printer paired at
+`https://labelbench.local:8443` is not paired at `https://10.10.17.185:8443`.
+Pair and print from the same address.
 
 **Windows** (PowerShell, administrator)
 
