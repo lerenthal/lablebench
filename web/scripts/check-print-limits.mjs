@@ -55,33 +55,60 @@ check("b21 density 1..5", mod.densityRangeForModel("b21"), { min: 1, max: 5 });
 console.log("evaluateWidth");
 check(
   "fits the device head -> no block, no warning",
-  mod.evaluateWidth(96, 96, 96),
+  mod.evaluateWidth(96, 8, 96, 96),
   { printWidth: 96, blocked: undefined, warning: undefined },
 );
 check(
   "wider than the device head -> blocked",
-  mod.evaluateWidth(200, 96, 96).blocked,
-  "200 > 96",
+  mod.evaluateWidth(200, 8, 96, 96).blocked,
+  "25 mm > 12 mm",
 );
 check(
   "wider than the model head but the device can print it -> warning only",
-  mod.evaluateWidth(200, 384, 96).warning,
-  "200 > 96",
+  mod.evaluateWidth(200, 8, 384, 96).warning,
+  "25 mm > 12 mm",
 );
 check(
   "wider than the model head and the device too -> blocked wins",
-  mod.evaluateWidth(200, 96, 96).blocked,
-  "200 > 96",
+  mod.evaluateWidth(200, 8, 96, 96).blocked,
+  "25 mm > 12 mm",
 );
 check(
   "no device connected, model head exceeded -> warning only",
-  mod.evaluateWidth(200, undefined, 96).warning,
-  "200 > 96",
+  mod.evaluateWidth(200, 8, undefined, 96).warning,
+  "25 mm > 12 mm",
 );
 check(
   "no device connected, model head exceeded -> not blocked",
-  mod.evaluateWidth(200, undefined, 96).blocked,
+  mod.evaluateWidth(200, 8, undefined, 96).blocked,
   undefined,
+);
+
+console.log("the resolution of the label and of the print head");
+check(
+  "a 40 mm label drawn at 300 dpi fits a B21 -> not blocked",
+  mod.evaluateWidth(472, 11.81, 384, 384).blocked,
+  undefined,
+);
+check(
+  "the same label at 203 dpi -> not blocked either",
+  mod.evaluateWidth(320, 8, 384, 384).blocked,
+  undefined,
+);
+check(
+  "a 60 mm label on a B21 -> blocked, in millimetres",
+  mod.evaluateWidth(480, 8, 384, 384).blocked,
+  "60 mm > 48 mm",
+);
+check(
+  "a 60 mm label drawn at 300 dpi on a B21 -> still blocked",
+  mod.evaluateWidth(709, 11.81, 384, 384).blocked,
+  "60 mm > 48 mm",
+);
+check(
+  "a 40 mm label on a D11 -> blocked, the D11's head is 12 mm",
+  mod.evaluateWidth(320, 8, 96, 96).blocked,
+  "40 mm > 12 mm",
 );
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

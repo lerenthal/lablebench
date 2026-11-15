@@ -5,6 +5,7 @@
   import type { SerialConfig } from "$/types";
   import { connectionState, printerClient, printerInfo, printerMeta, rfidInfo } from "$/stores/app";
   import * as effects from "$/utils/post_process";
+  import { resampleToDpmm } from "$/utils/label_render";
   import {
     type EncodedImage,
     ImageEncoder,
@@ -20,7 +21,7 @@
     PrintTaskCapability as TaskCap,
   } from "@mmote/niimbluelib";
   import { type LabelProps, type PostProcessType, type FabricJson, type PreviewProps, type TemplateModel, previewPropsKeys } from "$/types";
-  import { evaluateWidth, headWidthForModel, printableWidth } from "$/utils/print_limits";
+  import { evaluateWidth, headWidthForModel, NIIMBOT_DPMM, printableWidth } from "$/utils/print_limits";
   import { logError, logInfo } from "$/utils/app_log";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
@@ -81,6 +82,7 @@
    * warned about. The batch runner rejects such a row the same way.
    */
   let widthBlocked = $state<string>("");
+  let paperMismatch = $state<string>("");
     /**
    * The label is wider than the head of the model the template targets.
    * A wider printer will still print it, so this warns rather than blocks.
@@ -335,12 +337,30 @@
     // before it is compared with a head width, which is always in those.
     const evaluation = evaluateWidth(
       printableWidth(previewCanvas, labelProps.printDirection),
+      NIIMBOT_DPMM,
       headSize === -1 ? undefined : headSize,
       headWidthForModel(model),
     );
 
     widthBlocked = evaluation.blocked === undefined ? "" : $tr("params.label.warning.width") + " " + evaluation.blocked;
     modelMismatch = evaluation.warning === undefined ? "" : $tr("params.label.warning.model") + " " + evaluation.warning;
+
+    // The printer measures the media behind it. When what it reports and
+    // what the label was drawn for disagree, the label is printed in the
+    // wrong place — but it is still printed, so this is a warning and not a
+    // block.
+    paperMismatch = "";
+    const paper = $rfidInfo.paperInfo;
+    if (paper?.paperWidth !== undefined && paper?.paperHeight !== undefined) {
+      // With the print direction "left" the label's height is the dimension
+      // that crosses the print head, and so the one that must match the
+      // width of the media.
+      const acrossMm =
+        (labelProps.printDirection === "left" ? labelProps.size.height : labelProps.size.width) / labelProps.dpmm;
+      if (Math.abs(acrossMm - paper.paperWidth) > 0.5) {
+        paperMismatch = $tr("preview.paper.mismatch") + ` ${acrossMm} mm / ${paper.paperWidth} mm`;
+      }
+    }
   };
 
   const toggleSavedProp = (key: string, value: any) => {
@@ -471,7 +491,11 @@
 
     fabricTempCanvas.requestRenderAll();
 
-    const preRenderedCanvas = fabricTempCanvas.toCanvasElement(1);
+    // The label may have been drawn at another resolution. The printer has
+    // one native resolution — 203 dpi — and expects the data in its dots, so
+    // the raster is brought back to it before anything is measured or sent.
+    const rendered = fabricTempCanvas.toCanvasElement(1);
+    const preRenderedCanvas = resampleToDpmm(rendered, labelProps.dpmm, NIIMBOT_DPMM);
     const ctx = preRenderedCanvas.getContext("2d")!;
     previewCanvas.width = preRenderedCanvas.width;
     previewCanvas.height = preRenderedCanvas.height;
@@ -588,6 +612,12 @@
         <MdIcon icon="block" />
         {$tr("preview.print.blocked_detail")}
         <strong>{widthBlocked}</strong>
+      </div>
+    {/if}
+
+    {#if paperMismatch !== ""}
+      <div class="alert alert-warning" role="alert">
+        <strong>{paperMismatch}</strong>
       </div>
     {/if}
 

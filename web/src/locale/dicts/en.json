@@ -475,5 +475,8 @@
   "log.fallback": "The clipboard was refused, so the log is here to be copied by hand:",
   "editor.properties.empty": "Nothing is selected. Click an object on the label to change it.",
   "main.status.connected": "Connected",
-  "main.status.disconnected": "Not connected"
+  "main.status.disconnected": "Not connected",
+  "connector.paper.loaded": "Loaded",
+  "connector.paper.gap": "gap",
+  "preview.paper.mismatch": "The loaded label is not the size of this template:"
 }

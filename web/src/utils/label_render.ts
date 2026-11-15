@@ -101,6 +101,43 @@ export function applyPostProcess(image: ImageData, params: RenderParams): ImageD
  * @param variables  merged variable values (already resolved from the CSV row)
  * @param params     1-bit post-processing settings
  */
+/**
+ * Resample a raster drawn at one resolution to another.
+ *
+ * A label is designed at whatever resolution it was created at, but the
+ * printer has one native resolution — 203 dpi for every NIIMBOT — and it
+ * expects the data in dots of that resolution. A 40 mm label drawn at 300
+ * dpi is 472 px wide; the printer's head is 384 px at 203 dpi, so the
+ * raster has to come back down to 320 px before it is sent, or the label
+ * prints at the wrong size.
+ *
+ * The whole raster is scaled, so the layout is preserved exactly — an object
+ * that is 5 mm tall is still 5 mm tall afterwards.
+ */
+export function resampleToDpmm(
+  canvas: HTMLCanvasElement,
+  fromDpmm: number,
+  toDpmm: number,
+): HTMLCanvasElement {
+  if (!fromDpmm || fromDpmm === toDpmm) {
+    return canvas;
+  }
+
+  const scale = toDpmm / fromDpmm;
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(canvas.width * scale));
+  out.height = Math.max(1, Math.round(canvas.height * scale));
+
+  const ctx = out.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(canvas, 0, 0, out.width, out.height);
+
+  return out;
+}
+
 export async function renderLabelCanvas(
   fabricJson: FabricJson,
   labelProps: LabelProps,

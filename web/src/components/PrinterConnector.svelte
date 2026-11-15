@@ -186,10 +186,13 @@
     const paper = $rfidInfo.paperInfo;
     let dpmm = 8;
 
-    if ($printerInfo.resolutionClass !== undefined) {
-      dpmm = $printerInfo.resolutionClass === ResolutionClass.DPI300 ? 11.81 : 0;
-    } else if ($printerInfo.capabilities?.printheadDpi !== undefined) {
-      dpmm = $printerInfo.capabilities?.printheadDpi === 300 ? 11.81 : 0;
+    // Every NIIMBOT prints at 203 dpi — 8 px/mm. The printer reports its
+    // head's resolution as 200, which is the same thing to within a rounding
+    // error, and no NIIMBOT is a 300 dpi machine.
+    if ($printerInfo.resolutionClass === ResolutionClass.DPI300) {
+      dpmm = 11.81;
+    } else if ($printerInfo.capabilities?.printheadDpi === 300) {
+      dpmm = 11.81;
     }
 
     if (paper?.paperWidth !== undefined && paper?.paperHeight !== undefined) {
@@ -253,6 +256,28 @@
         {$tr("connector.rfid.paper")}
         <button class="btn btn-sm p-0" onclick={() => $printerClient.fetchRfidInfo()}><MdIcon icon="loop" /></button>
       </div>
+
+      <!--
+        What the printer says is loaded.
+
+        The NIIMBOT measures the media behind it, so it knows the width of the
+        roll and the height of the label on it. That is the one thing about
+        the loaded stock the app cannot know for itself, and it is the thing
+        that makes a label print in the wrong place.
+      -->
+      {#if $rfidInfo.paperInfo?.paperWidth !== undefined}
+        <div class="d-flex border rounded mt-1">
+          <div class="px-1 bg-light-subtle border-end">{$tr("connector.paper.loaded")}</div>
+          <div class="px-1 flex-grow-1 text-center">
+            {$rfidInfo.paperInfo.paperWidth} × {$rfidInfo.paperInfo.paperHeight} mm
+            {#if $rfidInfo.paperInfo.gapHeight !== undefined}
+              <span class="fs-08 text-secondary">
+                ({$tr("connector.paper.gap")} {$rfidInfo.paperInfo.gapHeight} mm)
+              </span>
+            {/if}
+          </div>
+        </div>
+      {/if}
 
       {#if $rfidInfo.labelRfidInfo?.tagPresent}
         <div class="d-flex border rounded mt-1">
