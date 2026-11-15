@@ -394,29 +394,3 @@ export const turnContent = (
 
   return { width: size.height, height: size.width };
 };
-
-/**
- * Point a design at a printer.
- *
- * The two printer families take the label differently: one feeds it the long
- * way round, the other the short way. A design drawn for one is the other
- * turned a quarter — and the label's own size is the same either way, so
- * the canvas is transposed and the content is turned with it. The label
- * that comes out of the printer is the same label; it is simply held the
- * other way round.
- *
- * When the direction does not change, nothing is turned: the design is
- * already the right way up for that printer.
- */
-export const retargetToDirection = (
-  objects: fabric.FabricObject[],
-  size: { width: number; height: number },
-  from: "left" | "top",
-  to: "left" | "top",
-): { width: number; height: number } => {
-  if (from === to) {
-    return { width: size.width, height: size.height };
-  }
-
-  return turnContent(objects, size);
-};

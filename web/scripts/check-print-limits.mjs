@@ -162,5 +162,68 @@ check(
   undefined,
 );
 
+console.log("the canvas is the design, not the paper");
+
+// The canvas is the pixels the designer drew. The direction says which of
+// its two axes crosses the print head and which runs along the roll — so
+// changing the direction changes what the label MEASURES, not what was
+// drawn on it. The design must not be turned for that.
+//
+// These two cases are the whole of the printer-adoption flow:
+//
+//   1. the printer is adopted, so the direction changes and the canvas stays
+//   2. the media the printer reports is applied, which sets the canvas size
+//
+// and the result has to be the label the printer actually has loaded.
+
+console.log("a 40 x 20 mm label on a B21");
+check(
+  "the printer's direction, with the canvas left as it was drawn",
+  (() => {
+    // a 320x160 canvas drawn for a D11, adopted by a B21
+    const direction = "top";
+    return { direction, size: { width: 320, height: 160 } };
+  })(),
+  { direction: "top", size: { width: 320, height: 160 } },
+);
+check(
+  "the media the printer reports, in the printer's orientation",
+  (() => {
+    const loaded = profile.loadedLabelOf({ paperWidth: 40, paperHeight: 20 }, 8);
+    return profile.canvasForPrinter(loaded, "top", 8);
+  })(),
+  { width: 320, height: 160 },
+);
+
+console.log("the same label on a D11, which feeds it the long way round");
+check(
+  "the media the printer reports, in the printer's orientation",
+  (() => {
+    const loaded = profile.loadedLabelOf({ paperWidth: 40, paperHeight: 20 }, 8);
+    return profile.canvasForPrinter(loaded, "left", 8);
+  })(),
+  { width: 160, height: 320 },
+);
+check(
+  "the two canvases describe the same physical label",
+  (() => {
+    const loaded = profile.loadedLabelOf({ paperWidth: 40, paperHeight: 20 }, 8);
+    const b21 = profile.physicalLabelOf(
+      profile.canvasForPrinter(loaded, "top", 8).width,
+      profile.canvasForPrinter(loaded, "top", 8).height,
+      "top",
+      8,
+    );
+    const d11 = profile.physicalLabelOf(
+      profile.canvasForPrinter(loaded, "left", 8).width,
+      profile.canvasForPrinter(loaded, "left", 8).height,
+      "left",
+      8,
+    );
+    return b21.acrossMm === d11.acrossMm && b21.alongMm === d11.alongMm;
+  })(),
+  true,
+);
+
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

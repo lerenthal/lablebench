@@ -5,8 +5,7 @@
     NiimbotBluetoothClient,
     NiimbotCapacitorBleClient,
     NiimbotSerialClient,
-    ResolutionClass,
-    SoundSettingsItemType,
+      SoundSettingsItemType,
     Utils,
     type AvailableTransports,
   } from "@mmote/niimbluelib";

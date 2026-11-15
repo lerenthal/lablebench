@@ -27,7 +27,7 @@
     type TemplateVariables,
   } from "$/types";
   import { FileUtils } from "$/utils/file_utils";
-  import { retargetToDirection } from "$/utils/label_fit";
+  import { adaptContentToLabel, fitObjectsInsideLabel } from "$/utils/label_fit";
   import { canvasForPrinter, loadedLabelOf } from "$/utils/printer_profile";
   import { tr } from "$/utils/i18n";
   import { LabelDesignerObjectHelper } from "$/utils/label_designer_object_helper";
@@ -71,7 +71,6 @@
   import { extractVariablesFromJson } from "$/utils/canvas_preprocess";
   import CsvBatchControl from "$/components/dialogs/CsvBatchControl.svelte";
   import { runPreflight, type PreflightFinding } from "$/utils/preflight";
-  import { adaptContentToLabel, fitObjectsInsideLabel } from "$/utils/label_fit";
   import PreflightPanel from "$/components/dialogs/PreflightPanel.svelte";
   import AppModal from "$/components/basic/AppModal.svelte";
 
@@ -483,21 +482,28 @@
    * exactly as it was and the design drawn in the new printer's own
    * convention.
    */
+  /**
+   * Follow the printer that is plugged in.
+   *
+   * The printer knows what it is, so the app does not ask. Two things follow
+   * from it: the family the template belongs to, and the way the printer
+   * feeds a label.
+   *
+   * The canvas itself is not touched here, and that is deliberate. The canvas
+   * is the design as it was drawn — the pixels on it are the designer's
+   * intent. What the direction says is which of the canvas's two axes
+   * crosses the print head and which runs along the roll, so changing it
+   * changes what the label measures, not what was drawn on it.
+   *
+   * The size follows separately, from the media the printer reports having
+   * loaded: that is the paper the design is really going onto, and the
+   * canvas is put into it. See `applyLoadedLabel`.
+   */
   const adoptPrinter = (model: TemplateModel, direction: "left" | "top") => {
     if (labelProps.printDirection !== direction) {
-      // The label is the same label; it is simply held the other way round
-      // by this printer. So the canvas is transposed and the design is
-      // turned with it — otherwise the text would come out sideways.
-      const size = retargetToDirection(
-        fabricCanvas!.getObjects(),
-        labelProps.size,
-        labelProps.printDirection,
-        direction,
-      );
-
-      labelProps = { ...labelProps, printDirection: direction, size };
-      fabricCanvas!.setDimensions(labelProps.size);
-      fabricCanvas!.requestRenderAll();
+      labelProps = { ...labelProps, printDirection: direction };
+      fabricCanvas!.setLabelProps(labelProps);
+      hasUnsavedChanges = true;
       editRevision++;
     }
 
@@ -552,7 +558,22 @@
     const loaded = loadedLabelOf($rfidInfo.paperInfo);
     if (loaded === undefined) return;
 
+    // The canvas is put into the media the printer has loaded, in the
+    // printer's own orientation. So the label on screen is the label that
+    // will come out of the machine: 40 mm across the head by 20 mm along
+    // the roll is a 320 by 160 canvas on a B21, and 160 by 320 on a D11.
     const size = canvasForPrinter(loaded, printer.direction, printer.dpmm);
+
+    if (size.width === labelProps.size.width && size.height === labelProps.size.height) {
+      // The canvas is already the right shape. Only the direction can
+      // differ, and the design must not be turned for that — the canvas is
+      // the design as it was drawn.
+      labelProps = { ...labelProps, printDirection: printer.direction };
+      fabricCanvas!.setLabelProps(labelProps);
+      hasUnsavedChanges = true;
+      editRevision++;
+      return;
+    }
 
     onUpdateLabelProps({
       ...labelProps,
