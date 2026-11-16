@@ -38,6 +38,9 @@
   const canvas = $derived(target.canvas as fabric.Canvas | undefined);
 
   const sources = $derived.by(() => {
+    // Read so this list is rebuilt after every canvas edit. The value is
+    // the subscription; it is the read that matters, not the number.
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     editRevision;
 
     return canvas === undefined ? [] : linkSources(canvas);

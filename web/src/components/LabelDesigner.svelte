@@ -375,6 +375,10 @@
       getCanvasForPreview() as { objects?: Array<{ text?: string; dynamicToken?: string }> },
       templateVariables.serial?.variable,
     );
+    // Built and thrown away inside this call: nothing watches it, and what
+    // the template renders from is the reassignment at the end. A SvelteMap
+    // here would make a reactive object for one loop and discard it.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const known = new Map(templateVariables.variables.map((v) => [v.name, v]));
 
     for (const name of found) {
@@ -959,11 +963,6 @@
 
   $effect(() => {
     fabricCanvas?.setLabelProps(labelProps);
-  });
-
-  $effect(() => {
-    if (currentDialog !== "preview") {
-    }
   });
 
   $effect(() => {

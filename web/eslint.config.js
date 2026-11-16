@@ -36,6 +36,18 @@ export default defineConfig(
     {
       rules: {
         "@typescript-eslint/no-explicit-any": "off",
+
+        // A leading underscore is how this codebase says "named so the shape
+        // reads, not because anything uses it" - the id dropped from a
+        // template before it is imported as a new one, for instance.
+        "@typescript-eslint/no-unused-vars": [
+          "error",
+          {
+            argsIgnorePattern: "^_",
+            varsIgnorePattern: "^_",
+            caughtErrorsIgnorePattern: "^_",
+          },
+        ],
       },
     },
   ]

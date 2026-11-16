@@ -1,7 +1,9 @@
 name: CI
 
-# The project's own contract is the typechecker and the test suite, so those
-# are what runs here. A push that breaks either never reaches the server.
+# The project's own contract is the typechecker, the test suite and the
+# linter, so those are what runs here. A push that breaks any of them never
+# reaches the server. The linter is in the list because twelve errors had
+# collected in the time it was not.
 
 on:
   push:
@@ -53,6 +55,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - run: npm ci
+      - run: npm run lint
       - run: npm run sv-check
       - run: npm run build
       - run: npm run check-limits

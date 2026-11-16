@@ -339,7 +339,7 @@
     try {
       // The transport is behind the sink, so the runner, the serial
       // allocation and the row reporting stay the same whatever it is.
-      const totalCopies = targets.reduce((sum, target) => sum + copiesPerRow, 0);
+      const totalCopies = targets.length * copiesPerRow;
 
       const sink = niimbotSink({
         client: $printerClient!,
@@ -482,7 +482,7 @@
 
       {#if parseErrors.length > 0}
         <div class="alert alert-warning py-1 px-2 small">
-          {#each parseErrors.slice(0, 5) as error}
+          {#each parseErrors.slice(0, 5) as error, i (i)}
             <div>{error}</div>
           {/each}
         </div>
