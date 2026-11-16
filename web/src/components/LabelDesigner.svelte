@@ -28,7 +28,7 @@
   } from "$/types";
   import { FileUtils } from "$/utils/file_utils";
   import { adaptContentToLabel, fitObjectsInsideLabel } from "$/utils/label_fit";
-  import { canvasForPrinter, loadedLabelOf } from "$/utils/printer_profile";
+  import { canvasForPrinter, loadedLabelFor } from "$/utils/printer_profile";
   import { tr } from "$/utils/i18n";
   import { LabelDesignerObjectHelper } from "$/utils/label_designer_object_helper";
   import { LocalStoragePersistence } from "$/utils/persistence";
@@ -553,12 +553,16 @@
    * is loaded and the app does not have to guess. The size is applied in the
    * printer's own orientation, so the canvas comes out the right way round
    * for the printer that is actually there.
+   *
+   * A reading the printer could not actually have — a width wider than its
+   * own print head, which is the backing paper rather than the label — is
+   * ignored, and the label on screen is left alone.
    */
   const applyLoadedLabel = () => {
     const printer = $printerProfile;
     if (printer === undefined || fabricCanvas === undefined) return;
 
-    const loaded = loadedLabelOf($rfidInfo.paperInfo);
+    const loaded = loadedLabelFor(printer, $rfidInfo.paperInfo);
     if (loaded === undefined) return;
 
     // The canvas is put into the media the printer has loaded, in the

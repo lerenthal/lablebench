@@ -24,6 +24,7 @@
     dimensionsUpdateRequest,
   } from "$/stores/app";
   import { describeWrongPort, identifySerialPorts } from "$/utils/serial_identify";
+  import { loadedLabelFor } from "$/utils/printer_profile";
   import { logError, logInfo, logWarn } from "$/utils/app_log";
   import type { ConnectionType } from "$/types";
   import { tr, type TranslationKey } from "$/utils/i18n";
@@ -219,25 +220,26 @@
    * The two are not interchangeable, because the printer says which is
    * which in the way it feeds the label: for a printer that takes the label
    * the long way round, the width across the head is the canvas height.
+   *
+   * Whether the reading is a label at all is `loadedLabelFor`'s decision, so
+   * this button and the automatic apply on connect agree: a width wider than
+   * the print head is the backing paper, not the label, and is ignored
+   * rather than squeezed down to the head. Clamping it would silently put
+   * the design on a label 8 mm wider than the one in the machine.
    */
   const loadedLabelSize = (): { width: number; height: number } | undefined => {
-    const paper = $rfidInfo.paperInfo;
-    if (paper?.paperWidth === undefined || paper?.paperHeight === undefined) return undefined;
+    const loaded = loadedLabelFor($printerProfile, $rfidInfo.paperInfo);
+    if (loaded === undefined) return undefined;
 
     const dpmm = $printerProfile?.dpmm ?? 8;
     const direction = $printerProfile?.direction ?? "left";
 
-    const acrossPx = Math.floor(paper.paperWidth * dpmm);
-    const alongPx = Math.floor(paper.paperHeight * dpmm);
+    const acrossPx = Math.floor(loaded.acrossMm * dpmm);
+    const alongPx = Math.floor(loaded.alongMm * dpmm);
 
-    // The width across the head has to be a whole number of dots, and it
-    // cannot be wider than the head itself.
-    let across = acrossPx - (acrossPx % 8);
-    const headPx = $printerProfile?.headPixels ?? $printerInfo.printheadWidth;
-
-    if (headPx !== undefined && across > headPx) {
-      across = Math.floor(headPx / 8) * 8;
-    }
+    // The width across the head is a whole number of dots. It is already no
+    // wider than the head, so there is nothing left to clamp.
+    const across = acrossPx - (acrossPx % 8);
 
     // The canvas is in the printer's own orientation: for a printer that
     // feeds the label the long way round, the canvas width runs along the

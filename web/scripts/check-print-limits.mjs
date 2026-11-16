@@ -45,6 +45,12 @@ const limits = await load(join(WEB, "src/utils/print_limits.ts"));
 const profile = await load(join(WEB, "src/utils/printer_profile.ts"));
 const errors = await load(join(WEB, "src/utils/printer_errors.ts"));
 
+// The library's own model table, for the checks that need a real printer
+// rather than a hand-made one. It ships as CommonJS, so the named exports
+// may sit on the namespace or behind `default` depending on the loader.
+const niimblue = await import("@mmote/niimbluelib");
+const { getPrinterMetaByModel, PrinterModel } = niimblue.default ?? niimblue;
+
 let failures = 0;
 const check = (name, actual, expected) => {
   const ok = JSON.stringify(actual) === JSON.stringify(expected);
@@ -160,6 +166,55 @@ check(
 check(
   "a continuous roll of 1000 mm -> not a label size, so not used",
   profile.loadedLabelOf({ paperWidth: 40, paperHeight: 1000 }, 8),
+  undefined,
+);
+
+console.log("a reading the printer could not actually have");
+// The sensor behind the head measures the media, so a label narrower than
+// its backing reports the backing: a 40 mm label on a 50 mm liner comes back
+// as 50 mm. Applied to a 48 mm head that sizes the canvas to paper the
+// printer cannot print across, and the width check then blocks a label that
+// prints perfectly well. An impossible width is ignored, like an impossible
+// length.
+const b21 = profile.connectedPrinterFor(
+  getPrinterMetaByModel(PrinterModel.B21),
+);
+const d11 = profile.connectedPrinterFor(
+  getPrinterMetaByModel(PrinterModel.D11),
+);
+check(
+  "a 40 mm label on a B21 -> believed",
+  profile.loadedLabelFor(b21, { paperWidth: 40, paperHeight: 20 }),
+  { acrossMm: 40, alongMm: 20 },
+);
+check(
+  "the 50 mm liner it sits on -> wider than the 48 mm head, so ignored",
+  profile.loadedLabelFor(b21, { paperWidth: 50, paperHeight: 20 }),
+  undefined,
+);
+check(
+  "exactly 48 mm on a 48 mm head -> still a label",
+  profile.loadedLabelFor(b21, { paperWidth: 48, paperHeight: 20 }),
+  { acrossMm: 48, alongMm: 20 },
+);
+check(
+  "a 12 mm roll on a D11 -> believed",
+  profile.loadedLabelFor(d11, { paperWidth: 12, paperHeight: 40 }),
+  { acrossMm: 12, alongMm: 40 },
+);
+check(
+  "a 15 mm reading on a D11's 12 mm head -> ignored",
+  profile.loadedLabelFor(d11, { paperWidth: 15, paperHeight: 40 }),
+  undefined,
+);
+check(
+  "no printer -> nothing to compare the width with, so the reading stands",
+  profile.loadedLabelFor(undefined, { paperWidth: 50, paperHeight: 20 }),
+  { acrossMm: 50, alongMm: 20 },
+);
+check(
+  "an impossible length is still ignored",
+  profile.loadedLabelFor(b21, { paperWidth: 40, paperHeight: 1000 }),
   undefined,
 );
 
