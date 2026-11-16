@@ -289,5 +289,44 @@ check(
   false,
 );
 
+console.log("the width that is actually measured at print time");
+// Both print paths resample the raster to the printer's native resolution and
+// then measure what comes back, so the canvas handed to printableWidthMm is
+// already in the printer's dots. It must be converted with NIIMBOT_DPMM:
+// converting it with the template's own dpmm is the same unit error one level
+// down, and it under-reports a label drawn above 8 dpmm — which would let an
+// over-wide raster reach the head.
+const resampled = (acrossMm, alongMm, fromDpmm) => {
+  const scale = limits.NIIMBOT_DPMM / fromDpmm;
+  return {
+    width: Math.max(1, Math.round(Math.round(acrossMm * fromDpmm) * scale)),
+    height: Math.max(1, Math.round(Math.round(alongMm * fromDpmm) * scale)),
+  };
+};
+const measuredAcross = (acrossMm, alongMm, fromDpmm) =>
+  limits.printableWidthMm(resampled(acrossMm, alongMm, fromDpmm), "top", limits.NIIMBOT_DPMM);
+
+check("a 40 mm label drawn at 8 dpmm measures 40 mm", measuredAcross(40, 20, 8), 40);
+check(
+  "a 60 mm label drawn at 300 dpi still measures 60 mm, not 40.64",
+  measuredAcross(60, 20, 11.81),
+  60,
+);
+check(
+  "so it is blocked on a 48 mm head instead of slipping through",
+  limits.evaluateWidth(measuredAcross(60, 20, 11.81), 48, 48).blocked,
+  "60 mm > 48 mm",
+);
+check(
+  "a 40 mm label drawn at 4 dpmm measures 40 mm, not 80",
+  measuredAcross(40, 20, 4),
+  40,
+);
+check(
+  "so it is not blocked on a 48 mm head that can print it",
+  limits.evaluateWidth(measuredAcross(40, 20, 4), 48, 48).blocked,
+  undefined,
+);
+
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

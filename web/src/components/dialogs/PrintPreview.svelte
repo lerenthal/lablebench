@@ -392,12 +392,17 @@
     // The device limit blocks the print; the model's limit warns, because a
     // wider printer will still print it.
     //
-    // Both sides are in millimetres: the raster is measured in the template's
-    // own pixels and converted with the template's resolution, and the print
-    // head is quoted in the printer's dots and converted with the printer's.
-    // Comparing pixels across those two would block labels that fit.
+    // Both sides are in millimetres, so the label is compared with the head
+    // by its physical size rather than by pixels from two resolutions.
+    //
+    // `previewCanvas` is sized from the resampled raster, so it is already in
+    // the printer's own dots and is converted with the printer's resolution.
+    // Converting it with the template's dpmm instead would mis-measure every
+    // template not drawn at 8 dpmm, in both directions: it would under-report
+    // a label drawn at 300 dpi and let an over-wide raster through, and
+    // over-report one drawn below 8 dpmm and block a label that fits.
     const evaluation = evaluateWidth(
-      printableWidthMm(previewCanvas, labelProps.printDirection, labelProps.dpmm),
+      printableWidthMm(previewCanvas, labelProps.printDirection, NIIMBOT_DPMM),
       $printerProfile?.headMm,
       headMmForModel(model),
     );

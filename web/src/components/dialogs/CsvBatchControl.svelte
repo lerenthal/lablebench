@@ -9,8 +9,8 @@
    * The column → variable binding is persisted with the template so re-importing
    * a CSV of the same shape just works.
    */
-  import { LabelType, PageColorType, type PrintTaskName } from "@mmote/niimbluelib";
-  import { connectionState, printerClient, printerInfo, printerMeta, printerProfile } from "$/stores/app";
+  import { PageColorType, type PrintTaskName } from "@mmote/niimbluelib";
+  import { connectionState, printerClient, printerProfile, rfidInfo } from "$/stores/app";
   import AppModal from "$/components/basic/AppModal.svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr } from "$/utils/i18n";
@@ -33,8 +33,8 @@
     import { DEFAULT_RENDER_PARAMS, renderLabelCanvas, type RenderParams } from "$/utils/label_render";
   import { extractVariablesFromJson } from "$/utils/canvas_preprocess";
   import { headMmForModel } from "$/utils/print_limits";
+  import { resolveLabelType } from "$/utils/printer_profile";
   import {
-    PRINT_HEAD_PIXELS,
     type ExportedLabelTemplate,
     type FabricJson,
     type LabelProps,
@@ -84,9 +84,45 @@
   let serialPad = $state<number>(initial.template.variables?.serial?.pad ?? 0);
 
   let copiesPerRow = $state<number>(1);
-  let density = $state<number>(2);
   let dithering = $state<RenderParams["postProcess"]>("threshold");
   let rotation = $state<"left" | "top">(initial.labelProps.printDirection);
+
+  /**
+   * The densities the connected printer accepts.
+   *
+   * The range is the printer's own — a D11 takes 1–3 and a B21 takes 1–5 —
+   * so it comes from the printer rather than from a number written into this
+   * dialog. Offering a D11 the range of a B21 lets a batch be sent at a
+   * density the printer will not take.
+   */
+  const densityMin = $derived($printerProfile?.densityMin ?? 1);
+  const densityMax = $derived($printerProfile?.densityMax ?? 5);
+
+  let density = $state<number>($printerProfile?.densityDefault ?? 2);
+
+  // A value left over from another printer, or typed past the end of the
+  // range, is brought back inside it rather than sent.
+  $effect(() => {
+    const clamped = Math.min(densityMax, Math.max(densityMin, density));
+    if (clamped !== density) {
+      density = clamped;
+    }
+  });
+
+  /**
+   * The label type the batch tells the printer it has loaded.
+   *
+   * This is the same resolution the print preview makes, so the two paths
+   * cannot tell the printer different things about the same roll. A printer
+   * only understands the stock kinds in its own capability list, and a kind
+   * it does not understand makes it attempt an RFID write it cannot
+   * complete — error 20, and the print never starts. This dialog has no type
+   * picker, so the roll's own tag decides, falling back to ordinary gapped
+   * stock.
+   */
+  const batchLabelType = $derived(
+    resolveLabelType($printerProfile, $rfidInfo.labelRfidInfo?.consumablesType, undefined),
+  );
 
   let page = $state<number>(0);
   let pageSize = 10;
@@ -309,7 +345,7 @@
         client: $printerClient!,
         printTaskName,
         density,
-        labelType: LabelType.WithGaps,
+        labelType: batchLabelType,
         speed: 1,
         pageColor: PageColorType.SingleColor,
         printDirection: rotation,
@@ -549,7 +585,7 @@
 
         <div class="input-group input-group-sm" style="max-width: 220px">
           <span class="input-group-text">{$tr("batch.density")}</span>
-          <input class="form-control" type="number" min="1" max="5" bind:value={density} />
+          <input class="form-control" type="number" min={densityMin} max={densityMax} bind:value={density} />
         </div>
 
         <div class="input-group input-group-sm" style="max-width: 260px">

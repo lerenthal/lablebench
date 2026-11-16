@@ -323,8 +323,9 @@
 
     // A template is drawn for a printer. When one is connected, the design
     // follows it: the family it belongs to, and the way round the printer
-    // feeds a label. So a template made for the other family is turned a
-    // quarter and prints the right way up on the printer that is there.
+    // feeds a label. The canvas keeps the pixels the designer drew — the
+    // direction only says which of its axes crosses the print head — and
+    // the size follows from the media the printer reports.
     if ($printerProfile !== undefined) {
       adoptPrinter($printerProfile.model, $printerProfile.direction);
     }
@@ -522,8 +523,10 @@
    * and the design follows it: the direction it feeds a label in, and the
    * family its sizes come from.
    *
-   * A design that was drawn for the other family is turned a quarter, so it
-   * prints the right way round on the printer that is actually there.
+   * The design itself is not turned. The canvas is what was drawn; the
+   * direction says which of its axes crosses the head. The design is fitted
+   * to the printer by `applyLoadedLabel` below, which puts it into the media
+   * the printer reports having loaded.
    */
   let lastAdoptedPrinter: string | undefined;
 

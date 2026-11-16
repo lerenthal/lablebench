@@ -354,43 +354,21 @@ export const adaptContentToLabel = (
   return { factor, rotated: turned };
 };
 
-/**
- * Turn a design a quarter turn, the way a change of printer turns it.
+/*
+ * There is deliberately no "turn the design for the other printer" helper
+ * here any more.
  *
- * The two printer families feed the label differently: one takes it the long
- * way round, the other the short way. A design drawn for one is the other
- * turned a quarter. So when a design moves to the other family, the canvas
- * is transposed and the content is turned with it — otherwise the design
- * would come out of the printer sideways.
+ * The canvas is the pixels the designer drew. A printer's direction says
+ * which of the canvas's two axes crosses the print head and which runs
+ * along the roll, so adopting a printer changes what the label *measures*,
+ * not what was drawn on it. Turning the design as well was wrong twice
+ * over: it turned a design that was already right for the printer, and it
+ * turned it a second time when the media was applied, because a change of
+ * size that transposes the canvas is indistinguishable from a label turned
+ * a quarter.
  *
- * The content is not rescaled: the label is the same size, only the way it
- * is held has changed.
+ * So the direction is adopted on its own, and the size comes from the media
+ * the printer reports having loaded — `applyLoadedLabel` in
+ * `LabelDesigner.svelte`, which resizes the canvas and lets
+ * `adaptContentToLabel` above fit the design into it.
  */
-export const turnContent = (
-  objects: fabric.FabricObject[],
-  size: { width: number; height: number },
-): { width: number; height: number } => {
-  const cx = size.width / 2;
-  const cy = size.height / 2;
-
-  // The turned canvas is the other way round, so its centre is elsewhere.
-  const ncx = size.height / 2;
-  const ncy = size.width / 2;
-
-  for (const obj of objects) {
-    obj.rotate((obj.angle ?? 0) + 90);
-
-    const centre = obj.getCenterPoint();
-    const dx = centre.x - cx;
-    const dy = centre.y - cy;
-
-    obj.set({
-      left: (obj.left ?? 0) + (cx - dy - centre.x) + (ncx - cx),
-      top: (obj.top ?? 0) + (cy + dx - centre.y) + (ncy - cy),
-    });
-
-    obj.setCoords();
-  }
-
-  return { width: size.height, height: size.width };
-};
