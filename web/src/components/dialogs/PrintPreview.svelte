@@ -633,6 +633,14 @@
 
     loadProps();
 
+    // The print task is the protocol the CONNECTED printer speaks, and it
+    // is detected from that printer. A saved one was detected for whatever
+    // printer was connected when it was saved, and loading it would send a
+    // B21 the packets of a B1. So the detected one wins.
+    if (detectedPrintTaskName !== undefined) {
+      params.printTaskName = detectedPrintTaskName;
+    }
+
     await generatePreviewData(currentPage);
   });
 </script>
