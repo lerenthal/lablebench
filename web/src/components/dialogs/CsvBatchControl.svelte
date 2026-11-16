@@ -326,6 +326,7 @@
             serialEnabled && serialVariable !== "" ? serialConfig() : undefined,
           headWidthMm: deviceHeadWidthMm,
           modelHeadWidthMm: headMmForModel(template.model),
+          describeWriteRfidFail: () => $tr("preview.error.write_rfid_fail"),
         },
         states,
         {

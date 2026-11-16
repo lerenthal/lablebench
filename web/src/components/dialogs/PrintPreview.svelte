@@ -5,6 +5,7 @@
   import type { SerialConfig } from "$/types";
   import {
   connectionState,
+  heartbeatData,
   printerClient,
   printerInfo,
   printerMeta,
@@ -13,6 +14,11 @@
 } from "$/stores/app";
   import * as effects from "$/utils/post_process";
   import { resampleToDpmm } from "$/utils/label_render";
+  import {
+    inspectRollTag,
+    isWriteRfidFail,
+    type TagWarning,
+  } from "$/utils/printer_errors";
   import {
     type EncodedImage,
     ImageEncoder,
@@ -96,6 +102,19 @@
    */
   let widthBlocked = $state<string>("");
   let paperMismatch = $state<string>("");
+  /**
+   * The roll's tag, as the printer sees it.
+   *
+   * Every NIIMBOT roll carries a small NFC tag holding the label's size and
+   * how many labels are left on it. The printer writes the count back when
+   * a print finishes, and if that write fails the print dies with error 20
+   * and no explanation. The printer reports what it can read beforehand, so
+   * the app looks at the same thing and says so before the print rather
+   * than after it.
+   */
+  let tagWarning = $derived<TagWarning | undefined>(
+    inspectRollTag({ tag: $rfidInfo.labelRfidInfo, heartbeat: $heartbeatData }),
+  );
     /**
    * The label is wider than the head of the model the template targets.
    * A wider printer will still print it, so this warns rather than blocks.
@@ -284,14 +303,14 @@
       }
       await currentPrintTask.waitForFinished();
     } catch (e) {
-      error = `${e}`;
+      error = describePrintFailure(e);
       console.error(e);
     }
 
     try {
       await endPrint();
     } catch (e) {
-      error = `${e}`;
+      error = describePrintFailure(e);
       console.error(e);
     }
 
@@ -303,6 +322,20 @@
     if (printRequested && !error) {
       modalRef.hide();
     }
+  };
+
+  /**
+   * What to say when the printer refuses the job.
+   *
+   * Error 20 gets a sentence of its own, because the number on its own
+   * tells the user nothing about what to do next.
+   */
+  const describePrintFailure = (e: unknown): string => {
+    if (isWriteRfidFail(e)) {
+      return $tr("preview.error.write_rfid_fail");
+    }
+
+    return `${e}`;
   };
 
   const updatePreview = () => {
@@ -652,6 +685,25 @@
     {#if paperMismatch !== ""}
       <div class="alert alert-warning" role="alert">
         <strong>{paperMismatch}</strong>
+      </div>
+    {/if}
+
+    <!--
+      The printer writes the label count back to the roll's NFC tag when a
+      print finishes, and that write is what can fail with error 20. The
+      printer reports what it can read beforehand, so the situation is
+      visible before the print rather than after it.
+    -->
+    {#if tagWarning !== undefined}
+      <div class="alert alert-warning" role="alert">
+        <MdIcon icon="warning" />
+        <strong>
+          {$tr(`preview.tag_warning.${tagWarning.kind}` as TranslationKey)}
+        </strong>
+        {#if tagWarning.detail !== undefined}
+          <span class="text-secondary">({tagWarning.detail})</span>
+        {/if}
+        <div class="small mt-1">{$tr("preview.tag_warning.hint")}</div>
       </div>
     {/if}
 

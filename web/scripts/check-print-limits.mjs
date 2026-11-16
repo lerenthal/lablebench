@@ -43,6 +43,7 @@ const load = async (entry) => {
 
 const limits = await load(join(WEB, "src/utils/print_limits.ts"));
 const profile = await load(join(WEB, "src/utils/printer_profile.ts"));
+const errors = await load(join(WEB, "src/utils/printer_errors.ts"));
 
 let failures = 0;
 const check = (name, actual, expected) => {
@@ -223,6 +224,69 @@ check(
     return b21.acrossMm === d11.acrossMm && b21.alongMm === d11.alongMm;
   })(),
   true,
+);
+
+console.log("the roll's tag, which the printer writes the count back to");
+
+// The printer reports what it can read of the roll's tag before a print,
+// so the app can see the situation coming rather than after the print died
+// with error 20 and no explanation.
+check(
+  "a roll with a tag, plenty left -> nothing to say",
+  errors.inspectRollTag({
+    tag: { tagPresent: true, usedPaper: 10, allPaper: 100 },
+  }),
+  undefined,
+);
+check(
+  "plain thermal paper, no tag -> the roll has no tag",
+  errors.inspectRollTag({ tag: { tagPresent: false, usedPaper: 0, allPaper: 0 } })?.kind,
+  "no_tag",
+);
+check(
+  "the printer cannot read the tag -> it says so",
+  errors.inspectRollTag({
+    heartbeat: { paperRfidSuccess: false },
+    tag: { tagPresent: true, usedPaper: 10, allPaper: 100 },
+  })?.kind,
+  "unreadable",
+);
+check(
+  "the counter has run out -> the write would be refused",
+  errors.inspectRollTag({ tag: { tagPresent: true, usedPaper: 100, allPaper: 100 } })?.kind,
+  "exhausted",
+);
+check(
+  "no information at all -> nothing to say",
+  errors.inspectRollTag({}),
+  undefined,
+);
+
+console.log("recognising error 20");
+check(
+  "the library's error carries the code",
+  errors.printerErrorCode(new Error("Print error 20: WriteRfidFail")),
+  20,
+);
+check(
+  "an error with a reasonId carries it too",
+  errors.printerErrorCode(Object.assign(new Error("boom"), { reasonId: 20 })),
+  20,
+);
+check(
+  "error 20 is recognised",
+  errors.isWriteRfidFail(new Error("Print error 20: WriteRfidFail")),
+  true,
+);
+check(
+  "another error is not",
+  errors.isWriteRfidFail(new Error("Print error 16: WrongPaper")),
+  false,
+);
+check(
+  "a random failure is not",
+  errors.isWriteRfidFail(new Error("Timeout waiting response")),
+  false,
 );
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

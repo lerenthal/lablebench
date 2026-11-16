@@ -404,7 +404,7 @@
   "help.templates_title": "Templates",
   "help.templates_body": "A template lives on the server, not on this computer. Saving puts it there, and every workstation sees it at once — there is nothing to copy. The gallery lists everything on the server, and a template with no values in it prints straight from there.",
   "help.printing_title": "Printing",
-  "help.printing_body": "Printing happens in this browser, straight to the printer. The server never talks to a printer, so the printer has to be plugged into the workstation you are sitting at. Web Bluetooth and Web Serial only work on a page served over HTTPS, which is why the app is served from a trusted certificate.",
+  "help.printing_body": "Printing happens in this browser, straight to the printer. The server never talks to a printer, so the printer has to be plugged into the workstation you are sitting at. Web Bluetooth and Web Serial only work on a page served over HTTPS, which is why the app is served from a trusted certificate.\n\nIf a print is refused with error 20 (WriteRfidFail), the printer could not write the label count back to the small NFC tag in the roll. Every NIIMBOT roll carries that tag: it holds the label's size and how many labels are left, and the printer updates it when a print finishes. The write is the printer's own bookkeeping, so there is no setting here that turns it off. The usual causes are plain thermal paper with no tag at all, a tag that has been damaged or removed, or a roll whose counter has run out. The print preview warns about each of these before you print.",
   "help.serial_title": "Serial numbers and dates",
   "help.serial_body": "A date or a serial number is a token. The canvas shows what it looks like now, but the template keeps the token, so every copy of the label differs. The serial number comes from a counter on the server, so two workstations printing at the same time never get the same number. Select the serial number object to set its counter, prefix, suffix, start, step and padding.",
   "params.label.common_sizes": "Sizes that fit this printer",
@@ -483,5 +483,11 @@
   "editor.model.none": "No printer connected. The template keeps the model it was made for.",
   "params.label.physical_size": "Label size",
   "params.label.physical_size.hint": "across the print head × along the roll",
-  "params.label.flip": "Turn the label a quarter"
+  "params.label.flip": "Turn the label a quarter",
+  "preview.error.write_rfid_fail": "The printer could not write the label count back to the roll's tag (error 20, WriteRfidFail). Every NIIMBOT roll carries a small NFC tag that holds how many labels are left; the printer updates it when a print finishes. That write failed, so the print was refused. The usual causes are plain thermal paper with no tag, a tag that has been damaged or removed, or a roll whose counter has run out. This is the printer's own bookkeeping, so there is no setting in the app that turns it off.",
+  "preview.tag_warning.no_tag": "The roll has no RFID tag",
+  "preview.tag_warning.unreadable": "The printer cannot read the roll's RFID tag",
+  "preview.tag_warning.exhausted": "The roll's label counter is used up",
+  "preview.tag_warning.hint": "The printer updates a tag in the roll when a print finishes. If it cannot, the print is refused with error 20. Check the roll is genuine NIIMBOT stock with an undamaged tag, and that it is not used up.",
+  "connector.rfid.no_tag.hint": "The printer updates a tag in the roll when a print finishes. Without one it cannot, and the print is refused with error 20. Rolls of plain thermal paper have no tag; NIIMBOT rolls do."
 }

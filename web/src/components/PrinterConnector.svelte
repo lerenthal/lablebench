@@ -362,6 +362,7 @@
         {/if}
       {:else}
         {$tr("connector.rfid.no_tag")}
+        <div class="small text-secondary mt-1">{$tr("connector.rfid.no_tag.hint")}</div>
       {/if}
 
       {#if $rfidInfo.ribbonRfidInfo?.tagPresent}

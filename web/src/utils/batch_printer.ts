@@ -30,6 +30,7 @@ import { allocateSerialValues } from "$/utils/dynamic_values";
 import type { SerialConfig } from "$/types";
 import { evaluateWidth, NIIMBOT_DPMM, printableWidthMm } from "$/utils/print_limits";
 import { logError, logInfo, logWarn } from "$/utils/app_log";
+import { isWriteRfidFail } from "$/utils/printer_errors";
 import type { FabricJson, LabelProps } from "$/types";
 
 export type BatchRowStatus = "pending" | "printing" | "done" | "failed" | "skipped";
@@ -83,6 +84,13 @@ export type BatchPrinterOptions = {
   modelHeadWidthMm?: number;
   /** The head width of the model the template targets. Rows wider than this are flagged, not rejected. */
   modelHeadWidth?: number;
+  /**
+   * The sentence to show when the printer refuses to write to the roll's tag.
+   *
+   * The batch runner has no translation table of its own, so the caller
+   * passes the wording in.
+   */
+  describeWriteRfidFail?: () => string;
   /**
    * The template's serial sequence, when it has one.
    *
@@ -313,7 +321,15 @@ export async function runBatch(
         // A failed row is recorded and the batch continues.
         const message = e instanceof Error ? e.message : String(e);
         logError("batch", `Row ${index + 1} failed`, e);
-        update(index, { status: "failed", error: message });
+        update(index, {
+          status: "failed",
+          // Error 20 gets a sentence of its own: the number on its own tells
+          // the user nothing about what to do next.
+          error:
+            isWriteRfidFail(e) && options.describeWriteRfidFail !== undefined
+              ? options.describeWriteRfidFail()
+              : message,
+        });
       }
     }
 

@@ -125,9 +125,8 @@ export const connectedPrinterFor = (
  *
  * The printer is told which kind of stock it has, because it needs to know
  * whether to look for gaps. It only understands the kinds in its own
- * capability list — and when it is told a kind it does not understand, it
- * tries to do the wrong thing with the roll, which on a B21 comes back as
- * "WriteRfidFail" and the print never starts.
+ * capability list, and a kind it does not understand is rejected outright
+ * with "SetPaperFail" (error 17).
  *
  * So the type is always one the printer understands. The roll's own tag is
  * the best evidence of what is loaded, and the user's choice is honoured

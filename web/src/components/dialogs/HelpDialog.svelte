@@ -147,7 +147,10 @@
     grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
   }
 
+  /* The printing section has two paragraphs, and a <p> collapses a newline.
+     The text carries its own paragraph breaks, so they are honoured. */
   .help-body {
+    white-space: pre-line;
     color: var(--lb-text-muted);
     font-size: 0.875rem;
     line-height: 1.55;
