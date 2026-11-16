@@ -277,6 +277,36 @@ export const loadedLabelOf = (
 };
 
 /**
+ * The label the printer has loaded, when the reading is one this printer
+ * could actually have.
+ *
+ * `loadedLabelOf` reports what the sensor measured. This decides whether to
+ * believe it is a label, which needs the printer as well as the reading.
+ *
+ * A width wider than the print head is not a label width. The sensor behind
+ * the head measures the media, and a label narrower than its backing reports
+ * the backing: a 40 mm label on a 50 mm liner comes back as 50 mm. Taking
+ * that at face value sizes the canvas to paper the printer cannot print
+ * across, and the width check then refuses to print a label that is
+ * perfectly printable — the printer's own reading blocking the printer.
+ *
+ * So an impossible width is ignored and the label on screen is left as it
+ * is, the same way an impossible length already is. The user's own size is
+ * better evidence than a reading that cannot be true.
+ */
+export const loadedLabelFor = (
+  printer: ConnectedPrinter | undefined,
+  paperInfo: PaperInfo | undefined,
+): PhysicalLabel | undefined => {
+  const loaded = loadedLabelOf(paperInfo);
+
+  if (loaded === undefined) return undefined;
+  if (printer !== undefined && loaded.acrossMm > printer.headMm) return undefined;
+
+  return loaded;
+};
+
+/**
  * The canvas a printer wants for a given label.
  *
  * The printer's own feed direction decides which way round the canvas is:

@@ -298,8 +298,16 @@ export async function runBatch(
           // Both sides are in millimetres, so a label is compared with the
           // head by its physical size rather than by pixels from two
           // different resolutions.
+          //
+          // The canvas measured here is the one that comes back from the
+          // resample above, so it is already in the printer's own dots. It
+          // must therefore be converted with the printer's resolution, not
+          // the template's: dividing the printer's pixels by the template's
+          // dpmm is the same unit error one level down, and it under-reports
+          // the width of a template drawn above 8 dpmm — which would let an
+          // over-wide raster through.
           const evaluation = evaluateWidth(
-            printableWidthMm(canvas, options.labelProps.printDirection, options.labelProps.dpmm),
+            printableWidthMm(canvas, options.labelProps.printDirection, NIIMBOT_DPMM),
             options.headWidthMm,
             options.modelHeadWidthMm,
           );
