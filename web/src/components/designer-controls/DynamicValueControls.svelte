@@ -82,7 +82,7 @@
       onchange={() => applyFormat(formatInput)} />
 
     <div class="mt-2 d-flex flex-wrap gap-1">
-      {#each DATE_TIME_FORMATS as format}
+      {#each DATE_TIME_FORMATS as format (format)}
         <button
           class="btn btn-sm {currentFormat === format ? 'btn-primary' : 'btn-outline-secondary'}"
           onclick={() => applyFormat(format)}>

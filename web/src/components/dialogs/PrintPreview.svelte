@@ -7,7 +7,6 @@
   connectionState,
   heartbeatData,
   printerClient,
-  printerInfo,
   printerMeta,
   printerProfile,
   rfidInfo,
@@ -40,7 +39,7 @@
     NIIMBOT_DPMM,
     printableWidthMm,
   } from "$/utils/print_limits";
-  import { logError, logInfo } from "$/utils/app_log";
+  import { logInfo } from "$/utils/app_log";
   import { resolveLabelType } from "$/utils/printer_profile";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";

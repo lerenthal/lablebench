@@ -24,7 +24,7 @@
 
   let {
     findings = [],
-    onselect = (id: number) => {},
+    onselect = () => {},
     onclose = () => {},
     onfix = () => {},
   }: Props = $props();

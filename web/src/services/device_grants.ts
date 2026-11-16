@@ -100,7 +100,7 @@ const usbKey = (device: USBDevice, index: number): string => {
   return `usb:${vid}:${pid}:${device.serialNumber ?? index}`;
 };
 
-const describeUsbDevice = (device: USBDevice, index: number): string => {
+const describeUsbDevice = (device: USBDevice): string => {
   const vid = device.vendorId.toString(16).padStart(4, "0");
   const pid = device.productId.toString(16).padStart(4, "0");
   const name = device.productName;
@@ -147,7 +147,7 @@ export const listGrantedDevices = async (transport: GrantTransport): Promise<Gra
 
       return devices.map((device, index) => ({
         key: usbKey(device, index),
-        name: describeUsbDevice(device, index),
+        name: describeUsbDevice(device),
         transport,
         handle: device,
       }));
