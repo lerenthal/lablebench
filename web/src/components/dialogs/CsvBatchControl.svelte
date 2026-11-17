@@ -10,7 +10,13 @@
    * a CSV of the same shape just works.
    */
   import { PageColorType, type PrintTaskName } from "@mmote/niimbluelib";
-  import { connectionState, printerClient, printerProfile, rfidInfo } from "$/stores/app";
+  import {
+    connectionState,
+    printerClient,
+    printerMeta,
+    printerProfile,
+    rfidInfo,
+  } from "$/stores/app";
   import AppModal from "$/components/basic/AppModal.svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr } from "$/utils/i18n";
@@ -172,9 +178,16 @@
    * The template's target model is only a hint — the connected unit wins.
    */
   const detectedPrintTask = $derived<PrintTaskName | undefined>(
-    $printerClient?.getPrintTaskType?.() ?? undefined,
+    $printerClient !== undefined && $printerMeta !== undefined
+      ? $printerClient.getPrintTaskType()
+      : undefined,
   );
-  const printTaskName = $derived<PrintTaskName>(detectedPrintTask ?? "B1");
+  // With nothing connected there is nothing to detect, and a batch cannot be
+  // printed anyway — but the fallback is the task of the printer family the
+  // template was made for, not a fixed one.
+  const printTaskName = $derived<PrintTaskName>(
+    detectedPrintTask ?? (template.model === "d11" ? "D110" : "B1"),
+  );
 
   // The template's declared variables, falling back to whatever placeholders the
   // canvas actually uses.

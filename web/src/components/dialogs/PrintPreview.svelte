@@ -87,7 +87,19 @@
   // eslint-disable-next-line no-undef
   let statusTimer: NodeJS.Timeout | undefined = undefined;
   let error = $state<string>("");
-  let detectedPrintTaskName: PrintTaskName | undefined = $printerClient?.getPrintTaskType();
+  /**
+   * The protocol the connected printer speaks.
+   *
+   * It is read from the printer rather than assumed, and it is derived
+   * rather than read once: the preview can be opened before the printer is
+   * connected, and a value read at that moment would be the default rather
+   * than the printer's own — which would send a D11 the packets of a B1.
+   */
+  let detectedPrintTaskName = $derived<PrintTaskName | undefined>(
+    $printerClient !== undefined && $printerMeta !== undefined
+      ? $printerClient.getPrintTaskType()
+      : undefined,
+  );
   let csvParsed: DSVRowArray<string>;
   let currentPage = $state<number>(0);
   let pagesTotal = $state<number>(1);
@@ -249,7 +261,13 @@
     $printerClient.on("printprogress", printListener);
     $printerClient.on("printpacketprogress", sendListener);
 
-    currentPrintTask = $printerClient.protocol.newPrintTask(params.printTaskName, opts);
+    // The protocol is the connected printer's, decided at the moment of the
+    // print. The preview may have been opened before the printer was
+    // connected, and the one that is connected now is the one that has to
+    // understand the packets.
+    const taskName =
+      detectedPrintTaskName ?? (model === "d11" ? "D110" : params.printTaskName);
+    currentPrintTask = $printerClient.protocol.newPrintTask(taskName, opts);
 
     try {
       await currentPrintTask.printInit();

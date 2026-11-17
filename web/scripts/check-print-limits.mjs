@@ -48,7 +48,7 @@ const turn = await load(join(WEB, "src/utils/label_turn.ts"));
 
 // The library's own model table, so the checks are driven off the same
 // facts the printer reports rather than a copy of them.
-const { modelsLibrary } = await import(
+const { modelsLibrary, LabelType, findPrintTask } = await import(
   pathToFileURL(join(WEB, "node_modules/@mmote/niimbluelib/dist/cjs/index.js")).href
 );
 const metaFor = (suffix) => modelsLibrary.find((m) => String(m.model).endsWith(suffix));
@@ -550,6 +550,95 @@ check(
   "a label turned a quarter and back is not a turn",
   turn.isTurnedLabel({ width: 320, height: 160 }, { width: 320, height: 160 }),
   false,
+);
+
+console.log("the B1's own stock list, which is shorter than the B21's");
+
+// The B1 does not understand Continuous stock, so a roll of that kind must
+// not be sent to it — the printer rejects a kind it does not know with
+// "SetPaperFail" (error 17) and nothing is printed.
+check(
+  "a request the B1 understands is honoured",
+  profile.resolveLabelType(
+    profile.connectedPrinterFor(labB1),
+    undefined,
+    LabelType.Black,
+  ),
+  LabelType.Black,
+);
+check(
+  "a request the B1 does not understand falls back to one it does",
+  profile.resolveLabelType(
+    profile.connectedPrinterFor(labB1),
+    undefined,
+    LabelType.Continuous,
+  ),
+  LabelType.WithGaps,
+);
+check(
+  "the roll's own type is used when the user asked for nothing",
+  profile.resolveLabelType(
+    profile.connectedPrinterFor(labB1),
+    LabelType.Transparent,
+    undefined,
+  ),
+  LabelType.Transparent,
+);
+check(
+  "and the roll's type is not used when the B1 does not understand it",
+  profile.resolveLabelType(
+    profile.connectedPrinterFor(labB1),
+    LabelType.Continuous,
+    undefined,
+  ),
+  LabelType.WithGaps,
+);
+check(
+  "the D11 understands even less, and falls back to gaps",
+  profile.resolveLabelType(
+    profile.connectedPrinterFor(labD11),
+    LabelType.Black,
+    undefined,
+  ),
+  LabelType.WithGaps,
+);
+
+console.log("the protocol each printer speaks");
+
+// The B1 and the B21 look alike but do not speak alike: the B1 has its own
+// print task, with a different print start and a different page size.
+check(
+  "the B1 speaks the B1 protocol",
+  findPrintTask(labB1.model, 3),
+  "B1",
+);
+// The D11 has been through several protocol revisions, and which one it
+// speaks depends on its firmware: the old one at v1 and v2, and the
+// original one from v3 on.
+check(
+  "a D11 on the older firmware speaks the D110 protocol",
+  findPrintTask(labD11.model, 1),
+  "D110",
+);
+check(
+  "and the same at v2",
+  findPrintTask(labD11.model, 2),
+  "D110",
+);
+check(
+  "a D11 on a later firmware speaks the original D11 protocol",
+  findPrintTask(labD11.model, 3),
+  "D11_V1",
+);
+check(
+  "and the same at v4",
+  findPrintTask(labD11.model, 4),
+  "D11_V1",
+);
+check(
+  "the B1 speaks the same protocol at every version",
+  [1, 2, 3, 4, 5].map((v) => findPrintTask(labB1.model, v)),
+  ["B1", "B1", "B1", "B1", "B1"],
 );
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
