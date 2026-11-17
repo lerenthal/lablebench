@@ -58,4 +58,4 @@ jobs:
       - run: npm run lint
       - run: npm run sv-check
       - run: npm run build
-      - run: npm run check-limits
+      - run: npm run checks

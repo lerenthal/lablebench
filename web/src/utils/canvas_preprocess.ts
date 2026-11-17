@@ -2,35 +2,12 @@ import * as fabric from "fabric";
 import Barcode from "$/fabric-object/barcode";
 import QRCode from "$/fabric-object/qrcode";
 import { TextboxExt } from "$/fabric-object/textbox-ext";
-import { DATE_TIME_KEY, VARIABLE_TEMPLATE_RX, preprocessDateTime } from "$/utils/dynamic_values";
+import { DATE_TIME_KEY, VARIABLE_TEMPLATE_RX, substituteTokens } from "$/utils/dynamic_values";
 import { findById, objectText } from "$/utils/linked_objects";
 
 type Variables = Record<string, string>;
 
-const preprocessString = (input: string, variables?: Variables): string => {
-  let result = input;
-  let prev: string;
-  let depth = 0;
-
-  do {
-    prev = result;
-    result = result.replace(
-      VARIABLE_TEMPLATE_RX,
-      (source, key: string, sign?: string, amount?: string, unit?: string, format?: string) => {
-        if (variables !== undefined && key in variables) {
-          return variables[key];
-        }
-        if (key === "dt") {
-          return preprocessDateTime(format, sign, amount, unit);
-        }
-        return source;
-      },
-    );
-    depth++;
-  } while (result !== prev && depth < 10);
-
-  return result;
-};
+const preprocessString = substituteTokens;
 
 /** Preprocess all variable values so nested expressions become expanded. */
 const preprocessVariables = (variables?: Variables): Variables | undefined => {

@@ -108,6 +108,46 @@ export const serialToken = (variable: string): string => `{${variable}}`;
  * variable — and when it names the template's serial variable, it is a
  * Serial number object.
  */
+/**
+ * Substitute every token in a piece of text.
+ *
+ * This is the one place a token becomes a value, and it works *within* the
+ * text rather than replacing it: `Lot: {lot}` becomes `Lot: SB-0412`, which
+ * is what lets a field carry its own heading. A value may itself hold a
+ * token, so the pass repeats until nothing changes, bounded in case two
+ * variables refer to each other.
+ *
+ * It lives here, beside the pattern it uses, because both the print pipeline
+ * and the design canvas need it and neither should own it.
+ */
+export const substituteTokens = (
+  input: string,
+  variables?: Record<string, string>,
+): string => {
+  let result = input;
+  let prev: string;
+  let depth = 0;
+
+  do {
+    prev = result;
+    result = result.replace(
+      VARIABLE_TEMPLATE_RX,
+      (source, key: string, sign?: string, amount?: string, unit?: string, format?: string) => {
+        if (variables !== undefined && key in variables) {
+          return variables[key];
+        }
+        if (key === DATE_TIME_KEY) {
+          return preprocessDateTime(format, sign, amount, unit);
+        }
+        return source;
+      },
+    );
+    depth++;
+  } while (result !== prev && depth < 10);
+
+  return result;
+};
+
 export type DynamicKind = "date" | "variable";
 
 export type DynamicToken = {
@@ -193,6 +233,7 @@ export const resolveDynamicObjects = (
   canvas: fabric.Canvas,
   serialVariable?: string,
   serialValues: Record<string, string> = {},
+  variables: Record<string, string> = {},
 ): void => {
   canvas.forEachObject((obj: fabric.FabricObject) => {
     if (!(obj instanceof TextboxExt)) {
@@ -200,26 +241,34 @@ export const resolveDynamicObjects = (
     }
 
     const source = obj.dynamicToken ?? obj.text ?? "";
-    const parsed = parseDynamicToken(source);
 
-    if (parsed === undefined) {
+    if (parseDynamicToken(source) === undefined) {
       return;
     }
 
-    if (parsed.kind === "date") {
-      obj.dynamicToken = source;
-      obj.set({ text: preprocessDateTime(parsed.format) });
-      return;
-    }
+    // Everything the object knows a value for. The serial number is written
+    // under its own variable name, which is how it reaches every print path
+    // without any of them knowing about serial numbers.
+    const values: Record<string, string> = { ...variables };
 
-    if (parsed.name !== undefined && parsed.name === serialVariable) {
-      obj.dynamicToken = source;
-
-      const value = serialValues[serialVariable];
-
-      if (value !== undefined) {
-        obj.set({ text: value });
+    if (serialVariable !== undefined) {
+      const allocated = serialValues[serialVariable];
+      if (allocated !== undefined) {
+        values[serialVariable] = allocated;
       }
+    }
+
+    // Substituted *within* the text, not over it. This used to replace the
+    // whole string with the resolved value, which quietly ate anything around
+    // the token: an object reading `Baked: {dt|YYYY-MM-DD}` showed only the
+    // date on the canvas and then printed correctly, because the print
+    // pipeline has always substituted in place. A field that carries its own
+    // heading depends on the two agreeing.
+    const resolved = substituteTokens(source, values);
+
+    if (resolved !== source) {
+      obj.dynamicToken = source;
+      obj.set({ text: resolved });
     }
   });
 };
