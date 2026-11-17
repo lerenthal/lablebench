@@ -20,14 +20,24 @@
  * module, so the two paths cannot drift apart.
  */
 
-import { PrinterModel, getPrinterMetaByModel } from "@mmote/niimbluelib";
+import { modelsLibrary } from "@mmote/niimbluelib";
 import { type TemplateModel } from "$/types";
-import { dpmmForDpi } from "$/utils/printer_profile";
+import { dpmmForDpi, libraryModelFor } from "$/utils/printer_profile";
 
-/** The template's target model → the library's model enum. */
-const MODEL_ENUM: Partial<Record<TemplateModel, PrinterModel>> = {
-  d11: PrinterModel.D11,
-  b21: PrinterModel.B21,
+/**
+ * The library's description of a model a template names.
+ *
+ * This was a two-entry map from the app's own family names to the library's
+ * enum, which meant a template drawn for any other printer had no head width
+ * at all and the model warning below could never fire for it. The lookup is
+ * by the library's own id now, over the whole table, so it answers for every
+ * model the library knows.
+ */
+const metaForTemplateModel = (model: TemplateModel | undefined) => {
+  const id = libraryModelFor(model);
+  if (id === undefined) return undefined;
+
+  return modelsLibrary.find((meta) => String(meta.model) === id);
 };
 
 /**
@@ -42,15 +52,13 @@ export const NIIMBOT_DPMM = 8;
  * The print head of a model, in millimetres.
  *
  * The head is quoted in dots at the printer's own resolution, so it is
- * converted with that resolution: the B21 is 384 dots at 203 dpi, which is
- * 48 mm, and the D11 is 96 dots at 203 dpi, which is 12 mm.
+ * converted with that resolution: a B1 is 384 dots at 203 dpi, which is
+ * 48 mm, and a D11 is 96 dots at 203 dpi, which is 12 mm. A 300 dpi model
+ * quotes more dots for the same millimetres, which is why the resolution has
+ * to come into it rather than a fixed 8.
  */
 export const headMmForModel = (model: TemplateModel | undefined): number | undefined => {
-  if (model === undefined) {
-    return undefined;
-  }
-
-  const meta = getPrinterMetaByModel(MODEL_ENUM[model]!);
+  const meta = metaForTemplateModel(model);
   if (meta === undefined) {
     return undefined;
   }
@@ -61,17 +69,15 @@ export const headMmForModel = (model: TemplateModel | undefined): number | undef
 /**
  * The density range a model accepts.
  *
- * The D11 takes 1–3; the B21 takes 1–5. Some newer B21 firmware ignores the
- * density command entirely, which is a firmware behaviour rather than a limit.
+ * A D11 takes 1–3; a B1 takes 1–5. Sending a value outside the range is
+ * rejected by the printer, so the slider has to follow the model rather than
+ * offer a fixed 1–5. Some newer firmware ignores the density command
+ * entirely, which is a firmware behaviour rather than a limit.
  */
 export const densityRangeForModel = (
   model: TemplateModel | undefined,
 ): { min: number; max: number } | undefined => {
-  if (model === undefined) {
-    return undefined;
-  }
-
-  const meta = getPrinterMetaByModel(MODEL_ENUM[model]!);
+  const meta = metaForTemplateModel(model);
   if (meta === undefined) {
     return undefined;
   }

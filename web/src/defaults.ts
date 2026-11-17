@@ -1,5 +1,5 @@
 import * as fabric from "fabric";
-import type { AppConfig, LabelPreset, LabelProps, TemplateModel } from "$/types";
+import type { AppConfig, LabelPreset, LabelProps } from "$/types";
 import { TextboxExt } from "$/fabric-object/textbox-ext";
 
 export const configureFabric = () => {
@@ -44,43 +44,79 @@ export const DEFAULT_LABEL_PRESETS: LabelPreset[] = [
 ];
 
 /**
- * Label sizes that fit each printer's print head.
+ * Label sizes that fit a printer's print head.
  *
- * The numbers are millimetres at 8 px/mm, which is 203 dpi — the resolution
- * every NIIMBOT prints at. With the print direction "left" the label's
- * HEIGHT is the dimension that crosses the print head, so the height cannot
- * exceed the head's width:
+ * These were two hand-written lists, one per family, which is part of what
+ * kept the app to two printers: a K3 has an 80 mm head and none of the sizes
+ * on offer would have been right for it. They are worked out from the head
+ * instead, so every printer gets sensible sizes and a new model needs no edit
+ * here.
  *
- *   D11   96 px head = 12 mm
- *   B21  384 px head = 48 mm
+ * Which side of the label the head limits depends on the way the printer
+ * feeds it. With the print direction "left" the label's HEIGHT crosses the
+ * head; with "top" it is the WIDTH. The length along the roll is free.
  *
- * The length along the roll is free; only the head limits the other side.
- * These are the sizes a lab actually buys and prints, so they are offered as
- * one click rather than typed in millimetres.
+ * The widths offered are the head itself plus the narrower stock sizes that
+ * fit under it, because a roll narrower than the head is the common case -
+ * the lab's own 40 x 20 mm labels sit on a 48 mm head.
  */
-export const MODEL_LABEL_PRESETS: Record<TemplateModel, LabelPreset[]> = {
-  // A D11 takes the label the long way round, so the canvas width runs along
-  // the roll and the canvas height across the head. These are 12 mm and 8 mm
-  // wide rolls — the head is 12 mm.
-  d11: [
-    { width: 40, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "12 × 40 mm" },
-    { width: 30, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "12 × 30 mm" },
-    { width: 20, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "12 × 20 mm" },
-    { width: 15, height: 12, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "12 × 15 mm" },
-    { width: 30, height: 8, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "8 × 30 mm" },
-    { width: 20, height: 8, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "8 × 20 mm" },
-  ],
-  // A B21 takes the label the other way: the canvas width crosses the head
-  // and the canvas height runs along the roll. The head is 48 mm, so these
-  // are 48 mm, 25 mm and 12 mm wide rolls.
-  b21: [
-    { width: 48, height: 100, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "48 × 100 mm" },
-    { width: 48, height: 50, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "48 × 50 mm" },
-    { width: 48, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "48 × 30 mm" },
-    { width: 25, height: 50, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "25 × 50 mm" },
-    { width: 25, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "25 × 30 mm" },
-    { width: 12, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "12 × 30 mm" },
-  ],
+
+/** Stock widths labels are actually sold in, in millimetres. */
+const STOCK_WIDTHS_MM = [8, 12, 15, 20, 25, 30, 40, 50, 56, 60, 72, 75, 80, 100, 104];
+
+/** Lengths along the roll worth offering, in millimetres. */
+const STOCK_LENGTHS_MM = [15, 20, 30, 40, 50, 75, 100];
+
+/**
+ * One-click label sizes for a printer with the given head.
+ *
+ * @param headMm    the print head's width in millimetres
+ * @param direction the way the printer feeds a label
+ * @param dpmm      the printer's resolution, in dots per millimetre
+ */
+export const labelPresetsForHead = (
+  headMm: number | undefined,
+  direction: "left" | "top",
+  dpmm: number,
+): LabelPreset[] => {
+  if (headMm === undefined || headMm <= 0) {
+    return [];
+  }
+
+  // The head's own width first, then the two widest stock sizes under it: a
+  // long list of every combination would be harder to pick from than typing
+  // the numbers, which is what these buttons exist to avoid.
+  const underHead = STOCK_WIDTHS_MM.filter((w) => w < headMm).slice(-2).reverse();
+  const widths = [Math.round(headMm * 10) / 10, ...underHead];
+
+  const presets: LabelPreset[] = [];
+
+  for (const across of widths) {
+    // Shorter labels for narrower stock: a 12 mm roll is not usually bought
+    // in 100 mm lengths, and the full ladder for every width is too many.
+    const lengths = across >= 40
+      ? [30, 50, 100]
+      : across >= 20
+        ? [20, 30, 50]
+        : [15, 20, 30, 40];
+
+    for (const along of lengths.filter((l) => STOCK_LENGTHS_MM.includes(l))) {
+      presets.push({
+        // "left" feeds the label the long way round, so the canvas width runs
+        // along the roll and its height crosses the head. "top" is the other
+        // way about. This is the same mapping `canvasForLabel` uses.
+        width: direction === "left" ? along : across,
+        height: direction === "left" ? across : along,
+        unit: "mm",
+        dpmm,
+        printDirection: direction,
+        shape: "rect",
+        title: `${across} × ${along} mm`,
+      });
+    }
+  }
+
+  return presets;
 };
 
 /** Default canvas dimensions */

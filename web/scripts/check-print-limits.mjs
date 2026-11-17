@@ -45,6 +45,7 @@ const limits = await load(join(WEB, "src/utils/print_limits.ts"));
 const profile = await load(join(WEB, "src/utils/printer_profile.ts"));
 const errors = await load(join(WEB, "src/utils/printer_errors.ts"));
 const turn = await load(join(WEB, "src/utils/label_turn.ts"));
+const defaults = await load(join(WEB, "src/defaults.ts"));
 
 // The library's own model table, so the checks are driven off the same
 // facts the printer reports rather than a copy of them.
@@ -73,13 +74,34 @@ const check = (name, actual, expected) => {
 };
 
 console.log("head widths from the library's model table");
+check("D11 -> 12 mm", limits.headMmForModel("D11"), 12);
+check("B1 -> 48 mm", limits.headMmForModel("B1"), 48);
+check("unknown model -> undefined", limits.headMmForModel(undefined), undefined);
+check("a name the library does not know -> undefined", limits.headMmForModel("NOPE"), undefined);
+
+// A template saved before models were recorded by their own id carries one of
+// the two old family names. Those have to keep answering, or every label in
+// the gallery loses its head width and its size buttons.
+console.log("the two old family names still answer");
 check("d11 -> 12 mm", limits.headMmForModel("d11"), 12);
 check("b21 -> 48 mm", limits.headMmForModel("b21"), 48);
-check("unknown model -> undefined", limits.headMmForModel(undefined), undefined);
+check("d11 maps to D11", profile.libraryModelFor("d11"), "D11");
+check("b21 maps to B21", profile.libraryModelFor("b21"), "B21");
+check("any other id is passed straight through", profile.libraryModelFor("K3"), "K3");
+
+// The whole point of the change: a printer nobody wrote a list entry for.
+console.log("printers the app used to refuse");
+check("a K3's head is 80 mm", limits.headMmForModel("K3"), 80);
+check("an ET10's head is 200 mm", limits.headMmForModel("ET10"), 200);
+check("a B1_PRO prints at 300 dpi, so 567 dots is still 48 mm", limits.headMmForModel("B1_PRO"), 48);
 
 console.log("density ranges");
-check("d11 density 1..3", limits.densityRangeForModel("d11"), { min: 1, max: 3 });
-check("b21 density 1..5", limits.densityRangeForModel("b21"), { min: 1, max: 5 });
+check("D11 density 1..3", limits.densityRangeForModel("D11"), { min: 1, max: 3 });
+check("B1 density 1..5", limits.densityRangeForModel("B1"), { min: 1, max: 5 });
+check("a K3's own range", limits.densityRangeForModel("K3"), {
+  min: metaFor("K3").densityMin,
+  max: metaFor("K3").densityMax,
+});
 
 console.log("evaluateWidth — everything in millimetres");
 check(
@@ -399,14 +421,14 @@ const labB1 = metaFor("B1");
 const labD11 = metaFor("D11");
 
 check(
-  "the B1 is recognised as the 48 mm family",
-  profile.familyForModel(labB1.model),
-  "b21",
+  "the B1 is recorded by its own model id",
+  profile.connectedPrinterFor(labB1).model,
+  "B1",
 );
 check(
-  "the D11 is recognised as the 12 mm family",
-  profile.familyForModel(labD11.model),
-  "d11",
+  "and so is the D11",
+  profile.connectedPrinterFor(labD11).model,
+  "D11",
 );
 check(
   "the B1's head is 48 mm",
@@ -551,6 +573,95 @@ check(
   turn.isTurnedLabel({ width: 320, height: 160 }, { width: 320, height: 160 }),
   false,
 );
+
+console.log("every printer the library describes can be designed for");
+
+// This is the claim the change rests on. The app used to accept 15 of these
+// and refuse the other 62, from two hand-written lists of names. Nothing
+// about a printer is decided from its name any more, so the only models it
+// cannot design for are ones the library itself says nothing about.
+const designable = modelsLibrary.filter(
+  (meta) => profile.connectedPrinterFor(meta) !== undefined,
+);
+check(
+  `all ${modelsLibrary.length} of the library's models are accepted`,
+  designable.length,
+  modelsLibrary.length,
+);
+check("nothing at all is still nothing", profile.connectedPrinterFor(undefined), undefined);
+
+// And every one of them reports the three facts a design needs. A head of
+// zero dots or a missing feed direction would make a canvas nobody can print,
+// so it is worth knowing the table never hands one over.
+const incomplete = modelsLibrary.filter((meta) => {
+  const p = profile.connectedPrinterFor(meta);
+  return (
+    !(p.headPixels > 0) ||
+    !(p.headMm > 0) ||
+    (p.direction !== "left" && p.direction !== "top") ||
+    !(p.dpmm > 0)
+  );
+});
+check("every model reports a head, a feed direction and a resolution", incomplete.length, 0);
+
+console.log("size buttons are worked out from the head, not a list");
+
+// The sizes on offer used to be two hand-written lists, so a printer outside
+// the two families got none at all.
+const b1Presets = defaults.labelPresetsForHead(48, "top", 8);
+const d11Presets = defaults.labelPresetsForHead(12, "left", 8);
+const k3Presets = defaults.labelPresetsForHead(80, "top", 8);
+
+check("a 48 mm head gets sizes", b1Presets.length > 0, true);
+check("a 12 mm head gets sizes", d11Presets.length > 0, true);
+check("an 80 mm head gets sizes too, which it never used to", k3Presets.length > 0, true);
+check("no head means no sizes to offer", defaults.labelPresetsForHead(undefined, "top", 8), []);
+
+// A size that does not fit the head is the bug these buttons exist to avoid,
+// so none of them may be wider than the head they were worked out from.
+const acrossOf = (preset) => (preset.printDirection === "left" ? preset.height : preset.width);
+check(
+  "nothing offered for a 12 mm head is wider than 12 mm",
+  d11Presets.every((preset) => acrossOf(preset) <= 12),
+  true,
+);
+check(
+  "nothing offered for a 48 mm head is wider than 48 mm",
+  b1Presets.every((preset) => acrossOf(preset) <= 48),
+  true,
+);
+check(
+  "an 80 mm head is offered its full width",
+  k3Presets.some((preset) => acrossOf(preset) === 80),
+  true,
+);
+// The feed direction decides which side of the canvas crosses the head, and
+// getting it the wrong way round turns every label a quarter.
+check(
+  "a label fed \"left\" has its length along the canvas width",
+  d11Presets[0].width > d11Presets[0].height,
+  true,
+);
+check(
+  "a label fed \"top\" has its width across the canvas width",
+  b1Presets[0].width,
+  48,
+);
+
+console.log("the protocol stand-in shown before anything is connected");
+
+// Guessing a protocol sends one printer another's packets, so not knowing has
+// to be expressible rather than defaulted.
+check("a D11's stand-in is a D11 protocol", profile.printTaskForModel("D11"), "D11_V1");
+check("a B1's is the B1 protocol", profile.printTaskForModel("B1"), "B1");
+check("an old d11 template resolves the same way", profile.printTaskForModel("d11"), "D11_V1");
+check(
+  "a model the library cannot place without a firmware version says so",
+  profile.printTaskForModel("K3"),
+  undefined,
+);
+check("and nothing named says nothing", profile.printTaskForModel(undefined), undefined);
+
 
 console.log("the B1's own stock list, which is shorter than the B21's");
 

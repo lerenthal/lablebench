@@ -40,7 +40,7 @@
     printableWidthMm,
   } from "$/utils/print_limits";
   import { logInfo } from "$/utils/app_log";
-  import { resolveLabelType } from "$/utils/printer_profile";
+  import { printTaskForModel, resolveLabelType } from "$/utils/printer_profile";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import { canvasPreprocess } from "$/utils/canvas_preprocess";
@@ -264,9 +264,15 @@
     // The protocol is the connected printer's, decided at the moment of the
     // print. The preview may have been opened before the printer was
     // connected, and the one that is connected now is the one that has to
-    // understand the packets.
-    const taskName =
-      detectedPrintTaskName ?? (model === "d11" ? "D110" : params.printTaskName);
+    // understand the packets. Falling back to the template's model is a
+    // per-model lookup, not a family guess; if neither can say, refuse rather
+    // than send a printer another model's packets.
+    const taskName = detectedPrintTaskName ?? printTaskForModel(model) ?? params.printTaskName;
+
+    if (taskName === undefined) {
+      throw new Error("Cannot tell which protocol this printer speaks.");
+    }
+
     currentPrintTask = $printerClient.protocol.newPrintTask(taskName, opts);
 
     try {

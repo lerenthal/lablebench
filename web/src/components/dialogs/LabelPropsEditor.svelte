@@ -14,14 +14,14 @@
   import LabelPresetsBrowser from "$/components/designer-controls/LabelPresetsBrowser.svelte";
   import { printerMeta, printerProfile } from "$/stores/app";
   import { tr } from "$/utils/i18n";
-  import { DEFAULT_LABEL_PRESETS, MODEL_LABEL_PRESETS } from "$/defaults";
+  import { DEFAULT_LABEL_PRESETS, labelPresetsForHead } from "$/defaults";
   import { onMount, tick } from "svelte";
   import { LocalStoragePersistence } from "$/utils/persistence";
   import type { PrintDirection } from "@mmote/niimbluelib";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { Toasts } from "$/utils/toasts";
   import { FileUtils } from "$/utils/file_utils";
-  import { evaluateWidth } from "$/utils/print_limits";
+  import { evaluateWidth, headMmForModel } from "$/utils/print_limits";
   import { z } from "zod";
   import AppModal from "$/components/basic/AppModal.svelte";
   import { appConfirm } from "$/stores/confirm";
@@ -67,12 +67,27 @@
   /**
    * The model the app designs for.
    *
-   * While a printer is connected, that printer decides: its family is the
-   * one whose sizes are on offer, because those are the sizes it can
-   * actually print. With no printer connected, the template's own model is
-   * what it falls back to.
+   * While a printer is connected, that printer decides: the sizes on offer
+   * are the ones its own head can take. With no printer connected, the
+   * template's own model is what it falls back to.
    */
   const effectiveModel = $derived($printerProfile?.model ?? model);
+
+  /**
+   * The sizes offered as one click.
+   *
+   * Worked out from the head in front of us rather than looked up by family,
+   * so a printer the app has never been told about still gets sizes that fit
+   * it. The connected printer's own numbers come first; with nothing
+   * connected, the template's model is looked up in the library.
+   */
+  const sizePresets = $derived(
+    labelPresetsForHead(
+      $printerProfile?.headMm ?? headMmForModel(effectiveModel),
+      $printerProfile?.direction ?? labelProps.printDirection ?? "left",
+      $printerProfile?.dpmm ?? 8,
+    ),
+  );
   let selectedPresetIndex = $state<number>(-1);
 
   let title = $state<string | undefined>("");
@@ -472,10 +487,10 @@
   -->
   <div class="mb-2">
     <div class="small text-uppercase text-secondary mb-1">
-      {$tr("params.label.common_sizes")} · {model.toUpperCase()}
+      {$tr("params.label.common_sizes")} · {effectiveModel}
     </div>
     <div class="d-flex flex-wrap gap-1">
-      {#each MODEL_LABEL_PRESETS[effectiveModel] ?? [] as preset (preset.title ?? `${preset.width}x${preset.height}`)}
+      {#each sizePresets as preset (preset.title ?? `${preset.width}x${preset.height}`)}
         <button
           class="btn btn-sm btn-outline-secondary size-chip"
           title={`${preset.width} × ${preset.height} ${preset.unit}`}

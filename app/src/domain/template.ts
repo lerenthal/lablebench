@@ -8,8 +8,23 @@
  */
 import { z } from "zod";
 
-/** §5.1 / §7: target printer model. */
-export const TemplateModelSchema = z.enum(["d11", "b21"]);
+/**
+ * The printer a template was drawn for: the library's own model id, such as
+ * `D11`, `B1` or `K3`.
+ *
+ * This was an enum of two families. It is a free string now, because the list
+ * of printer models belongs to the printer library in the browser and this
+ * server has no opinion about it - and should not, since it never talks to a
+ * printer. Pinning the list here would mean a schema change every time the
+ * library learned a new model.
+ *
+ * Nothing on the server is decided from this value. The geometry is stored
+ * beside it in `label_w_mm`, `label_h_mm` and `orientation`, and what can
+ * actually be printed is settled in the browser against the printer that is
+ * connected. The column has always been plain TEXT with no constraint, so
+ * templates saved as `d11` or `b21` keep working untouched.
+ */
+export const TemplateModelSchema = z.string().min(1).max(32);
 export type TemplateModel = z.infer<typeof TemplateModelSchema>;
 
 /**
@@ -18,12 +33,6 @@ export type TemplateModel = z.infer<typeof TemplateModelSchema>;
  */
 export const OrientationSchema = z.enum(["left", "top"]);
 export type Orientation = z.infer<typeof OrientationSchema>;
-
-/** Print head width in pixels, per model. Never send an over-wide raster. */
-export const PRINT_HEAD_PIXELS: Record<TemplateModel, number> = {
-  d11: 96,
-  b21: 384,
-};
 
 /** Nominal dots per millimetre (203 dpi ≈ 8 px/mm). */
 export const DEFAULT_DPMM = 8;
