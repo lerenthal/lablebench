@@ -35,6 +35,41 @@ export type RouteDeps = {
   assets: AssetService;
 };
 
+/**
+ * The image types an asset may be stored and served as.
+ *
+ * An asset is served from the app's own origin, so a type the browser could
+ * interpret as a document — HTML, or SVG with script in it — would be a way
+ * to run script against the page that holds the API key and the printer's
+ * device grants. Only the raster formats the designer can put on a label
+ * are allowed.
+ */
+const INLINE_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/bmp",
+  "image/webp",
+]);
+
+/**
+ * Whether an error is the multipart plugin refusing a file over the limit.
+ *
+ * The plugin enforces the size limit itself and throws before the route
+ * can look at the bytes, so this is how the documented error shape is
+ * returned instead of the plugin's own.
+ */
+const isFileTooLarge = (error: unknown, maxBytes: number): boolean => {
+  if (typeof error !== "object" || error === null) return false;
+
+  const code = (error as { code?: string }).code;
+  if (code === "FST_REQ_FILE_TOO_LARGE") return true;
+
+  const message = (error as { message?: string }).message;
+  return typeof message === "string" && message.includes("request file too large");
+};
+
 export function registerTemplateRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const { templates, assets } = deps;
 
@@ -127,14 +162,36 @@ export function registerTemplateRoutes(app: FastifyInstance, deps: RouteDeps): v
       return reply.code(400).send({ error: "no_file" });
     }
 
-    const bytes = await file.toBuffer();
     const maxBytes = app.config.maxAssetBytes;
+
+    let bytes: Buffer;
+    try {
+      bytes = await file.toBuffer();
+    } catch (e) {
+      // The multipart plugin enforces the limit itself, so it throws before
+      // the size can be checked here. The shape the API documents is the
+      // shape the client actually gets.
+      if (isFileTooLarge(e, maxBytes)) {
+        return reply.code(413).send({ error: "too_large", max_bytes: maxBytes });
+      }
+
+      throw e;
+    }
 
     if (bytes.length > maxBytes) {
       return reply.code(413).send({ error: "too_large", max_bytes: maxBytes });
     }
 
     const mime = file.mimetype || "application/octet-stream";
+
+    // Only images are stored. An asset is served from the app's own origin,
+    // so one that could be interpreted as a document — HTML, SVG — would be
+    // a way to run script against the page that holds the API key and the
+    // printer's device grants.
+    if (!INLINE_IMAGE_TYPES.has(mime)) {
+      return reply.code(415).send({ error: "unsupported_type", mime });
+    }
+
     const asset = assets.save({ filename: file.filename, mime, bytes }, request.actor);
 
     return reply.code(201).send({ asset });
@@ -148,8 +205,15 @@ export function registerTemplateRoutes(app: FastifyInstance, deps: RouteDeps): v
       return reply.code(404).send({ error: "not_found" });
     }
 
+    // An asset that was stored before the allow-list existed is still served,
+    // but not as a document: it is a download, and the browser is told not
+    // to guess what it is.
+    const inline = INLINE_IMAGE_TYPES.has(asset.mime);
+
     return reply
-      .header("Content-Type", asset.mime)
+      .header("Content-Type", inline ? asset.mime : "application/octet-stream")
+      .header("X-Content-Type-Options", "nosniff")
+      .header("Content-Disposition", inline ? "inline" : "attachment")
       .header("Cache-Control", "public, max-age=31536000, immutable")
       .send(assets.read(asset));
   });

@@ -49,6 +49,12 @@
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "no-referrer"
 		-Server
+
+		# The app loads nothing from anywhere else. The one exception is the
+		# ZPL preview, which renders a label through an outside service, and
+		# that is the user's own label going to it — so it is named rather
+		# than the whole outside world being allowed.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.labelary.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 	}
 
 	# The root CA is published so a new workstation can trust the origin in one

@@ -12,6 +12,7 @@
  */
 
 import * as fabric from "fabric";
+import { isTurnedLabel } from "$/utils/label_turn";
 
 /**
  * The shape of a label.
@@ -284,12 +285,10 @@ export const adaptContentToLabel = (
     return { factor: 1, rotated: false };
   }
 
-  // Has the label been turned? The new size is the old size the other way
-  // round, to within a fifth — close enough for the sizes a label comes in.
-  const turned =
-    Math.abs(newSize.width / oldSize.height - 1) < 0.2 &&
-    Math.abs(newSize.height / oldSize.width - 1) < 0.2 &&
-    Math.abs(newSize.width - oldSize.width) > 1;
+  // Has the label been turned? A label that is already square has no "other
+  // way round", so a resize of one is a resize and not a turn — and a round
+  // label is square by definition, so it is affected throughout.
+  const turned = isTurnedLabel(oldSize, newSize);
 
   if (turned) {
     // Turn every object a quarter turn about the middle of the old label.

@@ -44,6 +44,14 @@ const load = async (entry) => {
 const limits = await load(join(WEB, "src/utils/print_limits.ts"));
 const profile = await load(join(WEB, "src/utils/printer_profile.ts"));
 const errors = await load(join(WEB, "src/utils/printer_errors.ts"));
+const turn = await load(join(WEB, "src/utils/label_turn.ts"));
+
+// The library's own model table, so the checks are driven off the same
+// facts the printer reports rather than a copy of them.
+const { modelsLibrary } = await import(
+  pathToFileURL(join(WEB, "node_modules/@mmote/niimbluelib/dist/cjs/index.js")).href
+);
+const metaFor = (suffix) => modelsLibrary.find((m) => String(m.model).endsWith(suffix));
 
 // The library's own model table, for the checks that need a real printer
 // rather than a hand-made one. It ships as CommonJS, so the named exports
@@ -381,6 +389,167 @@ check(
   "so it is not blocked on a 48 mm head that can print it",
   limits.evaluateWidth(measuredAcross(40, 20, 4), 48, 48).blocked,
   undefined,
+);
+
+console.log("the printers in the lab");
+
+// The lab has a B1 and a D11. Their numbers come from the library's table,
+// so a change in the library shows up here rather than in the field.
+const labB1 = metaFor("B1");
+const labD11 = metaFor("D11");
+
+check(
+  "the B1 is recognised as the 48 mm family",
+  profile.familyForModel(labB1.model),
+  "b21",
+);
+check(
+  "the D11 is recognised as the 12 mm family",
+  profile.familyForModel(labD11.model),
+  "d11",
+);
+check(
+  "the B1's head is 48 mm",
+  profile.connectedPrinterFor(labB1).headMm,
+  48,
+);
+check(
+  "the D11's head is 12 mm",
+  profile.connectedPrinterFor(labD11).headMm,
+  12,
+);
+check(
+  "the B1 feeds a label the short way round",
+  profile.connectedPrinterFor(labB1).direction,
+  "top",
+);
+check(
+  "the D11 feeds a label the long way round",
+  profile.connectedPrinterFor(labD11).direction,
+  "left",
+);
+check(
+  "the D11 takes densities 1 to 3",
+  [
+    profile.connectedPrinterFor(labD11).densityMin,
+    profile.connectedPrinterFor(labD11).densityMax,
+  ],
+  [1, 3],
+);
+check(
+  "the B1 takes densities 1 to 5",
+  [
+    profile.connectedPrinterFor(labB1).densityMin,
+    profile.connectedPrinterFor(labB1).densityMax,
+  ],
+  [1, 5],
+);
+
+console.log("a 40 x 20 mm label, the stock in the lab");
+check(
+  "on the B1 it is 320 x 160 px, in the printer's own orientation",
+  profile.canvasForPrinter({ acrossMm: 40, alongMm: 20 }, "top", 8),
+  { width: 320, height: 160 },
+);
+check(
+  "on the B1 it fits the head",
+  limits.evaluateWidth(40, profile.connectedPrinterFor(labB1).headMm, 48).blocked,
+  undefined,
+);
+check(
+  "on the D11 it does not fit the head, and the print is blocked",
+  limits.evaluateWidth(40, profile.connectedPrinterFor(labD11).headMm, 12).blocked,
+  "40 mm > 12 mm",
+);
+check(
+  "a 12 mm label fits the D11",
+  limits.evaluateWidth(12, profile.connectedPrinterFor(labD11).headMm, 12).blocked,
+  undefined,
+);
+
+console.log("the backing paper, which the sensor measures instead of the label");
+
+// The sensor behind the print head measures the media the label sits on,
+// so a 40 mm label on a 50 mm liner reads as 50 mm. A width wider than the
+// print head cannot be a label width, so it is ignored.
+check(
+  "a 50 mm liner on a B1 -> ignored, the printer's own head is 48 mm",
+  profile.loadedLabelFor(profile.connectedPrinterFor(labB1), {
+    paperWidth: 50,
+    paperHeight: 20,
+  }),
+  undefined,
+);
+check(
+  "a 40 mm label on a B1 -> believed",
+  profile.loadedLabelFor(profile.connectedPrinterFor(labB1), {
+    paperWidth: 40,
+    paperHeight: 20,
+  }),
+  { acrossMm: 40, alongMm: 20 },
+);
+check(
+  "a 12 mm label on a D11 -> believed",
+  profile.loadedLabelFor(profile.connectedPrinterFor(labD11), {
+    paperWidth: 12,
+    paperHeight: 30,
+  }),
+  { acrossMm: 12, alongMm: 30 },
+);
+check(
+  "a 15 mm liner on a D11's 12 mm head -> ignored",
+  profile.loadedLabelFor(profile.connectedPrinterFor(labD11), {
+    paperWidth: 15,
+    paperHeight: 30,
+  }),
+  undefined,
+);
+
+console.log("turning the label, and not turning it when it is only resized");
+
+// A label that is turned comes out the other way round, and the design turns
+// with it. A label that is only resized does not — and a square label has
+// no "other way round" to be resized into.
+check(
+  "40 x 20 -> 20 x 40 is a turn",
+  turn.isTurnedLabel({ width: 40, height: 20 }, { width: 20, height: 40 }),
+  true,
+);
+check(
+  "40 x 20 -> 42 x 21 is not a turn",
+  turn.isTurnedLabel({ width: 40, height: 20 }, { width: 42, height: 21 }),
+  false,
+);
+check(
+  "40 x 40 -> 42 x 42 is not a turn, though the size is nearly square",
+  turn.isTurnedLabel({ width: 40, height: 40 }, { width: 42, height: 42 }),
+  false,
+);
+check(
+  "40 x 40 -> 40 x 40 is not a turn",
+  turn.isTurnedLabel({ width: 40, height: 40 }, { width: 40, height: 40 }),
+  false,
+);
+check(
+  "a round label, which is square by definition, is not turned by a resize",
+  turn.isTurnedLabel({ width: 320, height: 320 }, { width: 336, height: 336 }),
+  false,
+);
+check(
+  "a label that is clearly not square, turned, is turned",
+  turn.isTurnedLabel({ width: 320, height: 240 }, { width: 240, height: 320 }),
+  true,
+);
+check(
+  "a label that is nearly square is left alone, because a turn and a resize "
+    + "cannot be told apart",
+  turn.isTurnedLabel({ width: 320, height: 330 }, { width: 330, height: 320 }),
+  false,
+);
+check(
+  "a label turned a quarter and back is not a turn",
+  turn.isTurnedLabel({ width: 320, height: 160 }, { width: 320, height: 160 }),
+  false,
 );
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

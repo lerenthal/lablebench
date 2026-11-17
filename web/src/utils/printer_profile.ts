@@ -151,9 +151,6 @@ export const resolveLabelType = (
 
   // Nothing is known about the printer's stock, so fall back to the
   // ordinary kind with gaps, which is what most labels are.
-
-  // Nothing is known about the printer's stock, so fall back to the
-  // ordinary kind with gaps, which is what most labels are.
   if (requested !== undefined && requested !== LabelType.Invalid) return requested;
   if (consumablesType !== undefined && consumablesType !== LabelType.Invalid) {
     return consumablesType;
