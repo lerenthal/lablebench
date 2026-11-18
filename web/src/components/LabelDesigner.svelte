@@ -11,7 +11,6 @@
     appConfig,
     automation,
     connectionState,
-    dimensionsUpdateRequest,
     loadedFonts,
     printerProfile,
     rfidInfo,
@@ -27,7 +26,7 @@
   } from "$/types";
   import { FileUtils } from "$/utils/file_utils";
   import { adaptContentToLabel, fitObjectsInsideLabel, printableArea } from "$/utils/label_fit";
-  import { canvasForPrinter, loadedLabelFor } from "$/utils/printer_profile";
+  import { canvasForPrinter, loadedLabelFor, physicalLabelOf } from "$/utils/printer_profile";
   import { tr } from "$/utils/i18n";
   import { LabelDesignerObjectHelper } from "$/utils/label_designer_object_helper";
   import { LocalStoragePersistence } from "$/utils/persistence";
@@ -35,6 +34,7 @@
   import { UndoRedo, type UndoState } from "$/utils/undo_redo";
   import BarcodeParamsPanel from "$/components/designer-controls/BarcodeParamsControls.svelte";
   import CsvFieldsControl from "$/components/dialogs/CsvFieldsControl.svelte";
+  import PrinterPanel from "$/components/PrinterPanel.svelte";
   import ClipboardControls from "$/components/designer-controls/ClipboardControls.svelte";
   import GenericObjectParamsControls from "$/components/designer-controls/GenericObjectParamsControls.svelte";
   import IconPicker from "$/components/dialogs/IconPicker.svelte";
@@ -302,11 +302,6 @@
     }
   };
 
-  const updateDimensions = (width: number, height: number) => {
-    let newProps = { ...labelProps, size: { width, height } };
-    onUpdateLabelProps(newProps);
-  };
-
   const exportCurrentLabel = (): ExportedLabelTemplate => {
     const label = FileUtils.makeExportedLabel(fabricCanvas!, labelProps);
 
@@ -545,18 +540,65 @@
 
   $effect(() => {
     const printer = $printerProfile;
-    if (printer === undefined || fabricCanvas === undefined) return;
+
+    if (printer === undefined || fabricCanvas === undefined) {
+      // The printer has gone. Forgetting it here is what lets the same
+      // printer be adopted again when it comes back: without this, unplugging
+      // it, changing the roll and plugging it in again left the canvas on the
+      // old label for the rest of the session.
+      lastAdoptedPrinter = undefined;
+      return;
+    }
 
     const key = `${printer.libraryModel}:${printer.direction}`;
     if (lastAdoptedPrinter === key) return;
     lastAdoptedPrinter = key;
 
     adoptPrinter(printer.model, printer.direction);
+  });
 
-    // The printer also knows what is loaded in it, so the label is sized
-    // from that rather than from a guess. A printer that does not report
-    // it leaves the app exactly as it was.
-    applyLoadedLabel();
+  /**
+   * Follow the roll that is loaded.
+   *
+   * Separate from adopting the printer above, and that separation is the
+   * whole point: the printer is one fact and the roll in it is another, and
+   * they change at different moments. These used to be one effect keyed on
+   * the printer alone, so the canvas took the *first* reading for a given
+   * printer and then ignored every one after it. Changing a roll mid-session
+   * did nothing at all, and neither did unplugging and replugging - only
+   * reloading the page helped.
+   *
+   * The first reading of a connection is applied, which is what makes
+   * plugging a printer in size the canvas to what is in it. A later reading -
+   * a roll swapped while the app is open - is *not* applied over work that
+   * is already on the canvas. It is reported instead, and the printer panel
+   * offers to fit it. Silently reflowing a design someone has arranged,
+   * because they changed the paper, is not a feature.
+   */
+  let appliedRollKey: string | undefined;
+
+  $effect(() => {
+    const printer = $printerProfile;
+    const paper = $rfidInfo.paperInfo;
+
+    if (printer === undefined || fabricCanvas === undefined) {
+      appliedRollKey = undefined;
+      return;
+    }
+
+    const loaded = loadedLabelFor(printer, paper);
+
+    if (loaded === undefined) return;
+
+    const key = `${printer.libraryModel}:${loaded.acrossMm}x${loaded.alongMm}`;
+    if (appliedRollKey === key) return;
+
+    const first = appliedRollKey === undefined;
+    appliedRollKey = key;
+
+    if (first) {
+      untrack(() => applyLoadedLabel());
+    }
   });
 
   /**
@@ -601,6 +643,35 @@
       size: { width: size.width, height: size.height },
     });
   };
+
+  /**
+   * Put the loaded label on the canvas because the user asked for it.
+   *
+   * The automatic path above applies only the first reading of a connection.
+   * This is the other half: the panel offers it when the roll and the design
+   * disagree, and pressing it is an instruction rather than a guess, so it
+   * applies whatever is on the canvas.
+   */
+  const fitLoadedLabel = () => {
+    applyLoadedLabel();
+    undo.push(fabricCanvas!, labelProps);
+  };
+
+  /**
+   * The label's size in millimetres.
+   *
+   * The canvas is stored in printer dots, because that is what the head
+   * prints and what a template has to preserve. Millimetres are how the
+   * stock is bought, measured and talked about, so that is what is shown.
+   */
+  const canvasMm = $derived(
+    physicalLabelOf(
+      labelProps.size.width,
+      labelProps.size.height,
+      labelProps.printDirection,
+      labelProps.dpmm ?? DEFAULT_DPMM,
+    ),
+  );
 
   const onSave = () => {
     hasUnsavedChanges = false;
@@ -1185,14 +1256,6 @@
     event.returnValue = "";
   };
 
-  onMount(() =>
-    dimensionsUpdateRequest.subscribe((req) => {
-      if (req) {
-        updateDimensions(req.width, req.height);
-      }
-    }),
-  );
-
   onDestroy(() => {
     fabricCanvas!.dispose();
     window.removeEventListener("hashchange", loadLabelFromUrl);
@@ -1516,7 +1579,15 @@
       <div class="stage">
         <div class="stage__head">
           <span class="stage__chip">
-            <span class="stage__chip-dim">{labelProps.size.width} &times; {labelProps.size.height} px</span>
+            <!--
+              The label's size, in the unit the label is actually cut in.
+              The canvas is dots underneath - that is what the head prints -
+              but nobody buys stock by the dot, and every other size in the
+              app is stated in millimetres.
+            -->
+            <span class="stage__chip-dim" title={`${labelProps.size.width} × ${labelProps.size.height} px`}>
+              {canvasMm.acrossMm} &times; {canvasMm.alongMm} mm
+            </span>
             <span class="stage__chip-model">
               {$printerProfile !== undefined ? String($printerProfile.libraryModel) : templateModel.toUpperCase()}
             </span>
@@ -1578,6 +1649,16 @@
   <div class="row mb-1">
     <div class="col">
       <!--
+        What the printer is and what is loaded in it, beside the canvas
+        rather than inside a menu: it is the thing that decides where the
+        label lands.
+      -->
+      <PrinterPanel
+        canvasSize={labelProps.size}
+        dpmm={labelProps.dpmm ?? DEFAULT_DPMM}
+        onFit={fitLoadedLabel} />
+
+      <!--
         The controls for the selected object were a loose, centred row of
         widgets floating under the canvas, with the destructive action first
         and no indication of what they belonged to. They are now a panel with
@@ -1600,7 +1681,11 @@
         <div class="props-panel__body d-flex flex-wrap gap-3 align-items-end">
 
         {#if selectedObject && selectedCount === 1}
-          <GenericObjectParamsControls {selectedObject} {editRevision} valueUpdated={controlValueUpdated} />
+          <GenericObjectParamsControls
+            {selectedObject}
+            {editRevision}
+            valueUpdated={controlValueUpdated}
+            dpmm={labelProps.dpmm ?? DEFAULT_DPMM} />
           <ClipboardControls {selectedObject} {editRevision} valueUpdated={controlValueUpdated} />
         {/if}
 

@@ -1,7 +1,6 @@
 <script lang="ts">
   import {
     AutoShutdownTime,
-    LabelType,
     NiimbotBluetoothClient,
     NiimbotCapacitorBleClient,
     NiimbotSerialClient,
@@ -17,17 +16,14 @@
     heartbeatData,
     printerInfo,
     printerMeta,
-    printerProfile,
     heartbeatFails,
     automation,
     rfidInfo,
-    dimensionsUpdateRequest,
   } from "$/stores/app";
   import { describeWrongPort, identifySerialPorts } from "$/utils/serial_identify";
-  import { loadedLabelFor } from "$/utils/printer_profile";
   import { logError, logInfo, logWarn } from "$/utils/app_log";
   import type { ConnectionType } from "$/types";
-  import { tr, type TranslationKey } from "$/utils/i18n";
+  import { tr } from "$/utils/i18n";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { Toasts } from "$/utils/toasts";
   import { onMount } from "svelte";
@@ -210,53 +206,6 @@
     }
   };
 
-  /**
-   * The label the printer has loaded, in the printer's own words.
-   *
-   * The sensor behind the print head measures the media: how wide it is
-   * across the head, and how long one label is along the roll. Both are
-   * reported in millimetres.
-   *
-   * The two are not interchangeable, because the printer says which is
-   * which in the way it feeds the label: for a printer that takes the label
-   * the long way round, the width across the head is the canvas height.
-   *
-   * Whether the reading is a label at all is `loadedLabelFor`'s decision, so
-   * this button and the automatic apply on connect agree: a width wider than
-   * the print head is the backing paper, not the label, and is ignored
-   * rather than squeezed down to the head. Clamping it would silently put
-   * the design on a label 8 mm wider than the one in the machine.
-   */
-  const loadedLabelSize = (): { width: number; height: number } | undefined => {
-    const loaded = loadedLabelFor($printerProfile, $rfidInfo.paperInfo);
-    if (loaded === undefined) return undefined;
-
-    const dpmm = $printerProfile?.dpmm ?? 8;
-    const direction = $printerProfile?.direction ?? "left";
-
-    const acrossPx = Math.floor(loaded.acrossMm * dpmm);
-    const alongPx = Math.floor(loaded.alongMm * dpmm);
-
-    // The width across the head is a whole number of dots. It is already no
-    // wider than the head, so there is nothing left to clamp.
-    const across = acrossPx - (acrossPx % 8);
-
-    // The canvas is in the printer's own orientation: for a printer that
-    // feeds the label the long way round, the canvas width runs along the
-    // roll and the height crosses the head.
-    return direction === "left"
-      ? { width: alongPx, height: across }
-      : { width: across, height: alongPx };
-  };
-
-  const applyDimensionsClicked = () => {
-    const size = loadedLabelSize();
-
-    if (size !== undefined) {
-      dimensionsUpdateRequest.set(size);
-    }
-  };
-
   onMount(() => {
     featureSupport = Utils.getAvailableTransports();
 
@@ -300,73 +249,12 @@
         </div>
       {/if}
 
-      <div class="text-secondary mt-2">
-        {$tr("connector.rfid.paper")}
-        <button class="btn btn-sm p-0" onclick={() => $printerClient.fetchRfidInfo()}><MdIcon icon="loop" /></button>
-      </div>
-
       <!--
-        What the printer says is loaded.
-
-        The NIIMBOT measures the media behind it, so it knows the width of the
-        roll and the height of the label on it. That is the one thing about
-        the loaded stock the app cannot know for itself, and it is the thing
-        that makes a label print in the wrong place.
+        What is loaded in the printer used to be repeated here as well as
+        beside the canvas. Two places showing one fact drift apart, and the
+        one in a menu is the one nobody opens. The roll lives in the printer
+        panel now; this menu keeps what is genuinely about the device.
       -->
-      {#if $rfidInfo.paperInfo?.paperWidth !== undefined}
-        <div class="d-flex border rounded mt-1">
-          <div class="px-1 bg-light-subtle border-end">{$tr("connector.paper.loaded")}</div>
-          <div class="px-1 flex-grow-1 text-center">
-            {$rfidInfo.paperInfo.paperWidth} × {$rfidInfo.paperInfo.paperHeight} mm
-            {#if $rfidInfo.paperInfo.gapHeight !== undefined}
-              <span class="fs-08 text-secondary">
-                ({$tr("connector.paper.gap")} {$rfidInfo.paperInfo.gapHeight} mm)
-              </span>
-            {/if}
-          </div>
-        </div>
-      {/if}
-
-      {#if $rfidInfo.labelRfidInfo?.tagPresent}
-        <div class="d-flex border rounded mt-1">
-          <div class="px-1 bg-light-subtle border-end">{$tr("connector.rfid.usage")}</div>
-          <div class="px-1 flex-grow-1 d-flex align-items-center gap-1">
-            <div class="progress flex-grow-1" role="progressbar" style:height="0.6rem">
-              <div
-                class="progress-bar"
-                style:width={`${percentage($rfidInfo.labelRfidInfo.usedPaper, $rfidInfo.labelRfidInfo.allPaper)}%`}>
-              </div>
-            </div>
-            <div class="fs-08">
-              {$rfidInfo.labelRfidInfo?.usedPaper} / {$rfidInfo.labelRfidInfo?.allPaper}
-            </div>
-          </div>
-        </div>
-
-        <div class="d-flex border rounded mt-1">
-          <div class="px-1 bg-light-subtle border-end">{$tr("connector.rfid.type")}</div>
-          <div class="px-1 flex-grow-1 text-center">
-            {$tr(`preview.label_type.${LabelType[$rfidInfo.labelRfidInfo?.consumablesType]}` as TranslationKey)} ({$rfidInfo
-              .labelRfidInfo?.consumablesType})
-          </div>
-        </div>
-
-        {#if $rfidInfo.paperInfo?.paperWidth !== undefined && $rfidInfo.paperInfo?.paperHeight !== undefined}
-          <div class="d-flex border rounded mt-1">
-            <div class="px-1 bg-light-subtle border-end">{$tr("connector.rfid.dimensions")}</div>
-            <div class="px-1 flex-grow-1 text-center">
-              {$rfidInfo.paperInfo.paperWidth}x{$rfidInfo.paperInfo.paperHeight}mm
-              <button class="btn text-info set-dim-button" onclick={applyDimensionsClicked}>
-                <MdIcon icon="aspect_ratio" />
-              </button>
-            </div>
-          </div>
-        {/if}
-      {:else}
-        {$tr("connector.rfid.no_tag")}
-        <div class="small text-secondary mt-1">{$tr("connector.rfid.no_tag.hint")}</div>
-      {/if}
-
       {#if $rfidInfo.ribbonRfidInfo?.tagPresent}
         <div class="text-secondary mt-2">
           {$tr("connector.rfid.ribbon")}
@@ -577,11 +465,5 @@
   .dropdown-menu {
     width: 100vw;
     max-width: 300px;
-  }
-
-  .set-dim-button {
-    padding: 0 0.3rem;
-    font-size: 0.875rem;
-    line-height: 1.2;
   }
 </style>
