@@ -14,7 +14,9 @@
     "gen-mdi-list": "node gen-mdi-list.mjs > src/styles/mdi_icons.ts",
     "lint": "eslint .",
     "format-all": "prettier --write \"src/**/*.{ts,svelte}\" \"!src/styles/mdi_icons.ts\"",
-    "check-limits": "node scripts/check-print-limits.mjs"
+    "check-limits": "node scripts/check-print-limits.mjs",
+    "check-fields": "node scripts/check-csv-fields.mjs",
+    "checks": "npm run check-limits && npm run check-fields"
   },
   "dependencies": {
     "@capacitor/core": "^8.4.1",
@@ -25,7 +27,6 @@
     "@mmote/niimbluelib": "0.49.1",
     "@popperjs/core": "^2.11.8",
     "bootstrap": "5.3.8",
-    "d3-dsv": "^3.0.1",
     "dayjs": "^1.11.21",
     "fabric": "^7.4.0",
     "jsbarcode": "^3.12.3",
@@ -41,7 +42,6 @@
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tsconfig/svelte": "^5.0.8",
     "@types/bootstrap": "^5.2.11",
-    "@types/d3-dsv": "^3.0.7",
     "@types/node": "^24.13.2",
     "@types/papaparse": "^5.5.2",
     "@types/qrcode-svg": "^1.1.5",

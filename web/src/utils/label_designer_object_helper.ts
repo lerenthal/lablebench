@@ -14,6 +14,7 @@ import { Toasts } from "$/utils/toasts";
 import { FileUtils } from "$/utils/file_utils";
 import { CanvasUtils } from "$/utils/canvas_utils";
 import { TextboxExt, TextboxExtProps } from "$/fabric-object/textbox-ext";
+import type { FieldBox } from "$/utils/csv_fields";
 
 export class LabelDesignerObjectHelper {
   static async addSvg(canvas: fabric.Canvas, svgCode: string): Promise<fabric.FabricObject | fabric.Group> {
@@ -139,6 +140,48 @@ export class LabelDesignerObjectHelper {
 
     canvas.add(obj);
     canvas.centerObject(obj);
+    return obj;
+  }
+
+  /**
+   * A field object: a merge variable, optionally carrying its own heading.
+   *
+   * This is what a CSV column becomes on the canvas. The text is the token -
+   * `{lot}`, or `Lot: {lot}` - and the canvas shows the value once a row is
+   * being previewed, exactly as the Date & time object shows today's date.
+   * Not editable on the canvas for the same reason those are not: the text
+   * is a value that only exists at print time, so typing over it would
+   * replace a live field with a dead word. The heading is changed in the
+   * object's own panel.
+   *
+   * @param box where the field goes, from `layOutFields`. Omitted, the object
+   *   is centred like any other newly added one.
+   */
+  static addField(canvas: fabric.Canvas, token: string, box?: FieldBox): TextboxExt {
+    const obj = new TextboxExt(token, {
+      ...OBJECT_DEFAULTS_TEXT,
+      ...(box === undefined
+        ? {}
+        : {
+            left: box.left,
+            top: box.top,
+            width: box.width,
+            fontSize: box.fontSize,
+            textAlign: "left" as fabric.TextboxProps["textAlign"],
+            originX: "left" as fabric.TOriginX,
+            originY: "top" as fabric.TOriginY,
+          }),
+    });
+
+    obj.dynamicToken = token;
+    obj.editable = false;
+
+    canvas.add(obj);
+
+    if (box === undefined) {
+      canvas.centerObject(obj);
+    }
+
     return obj;
   }
 

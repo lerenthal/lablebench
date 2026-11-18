@@ -8,6 +8,11 @@
    *
    * The column → variable binding is persisted with the template so re-importing
    * a CSV of the same shape just works.
+   *
+   * The spreadsheet itself comes from `csvSource` — the one the designer
+   * loaded. This dialog used to ask for the file a second time, with its own
+   * parser and its own idea of what was in it, which is how the app could be
+   * shown one CSV and print another.
    */
   import { PageColorType, type PrintTaskName } from "@mmote/niimbluelib";
   import {
@@ -21,10 +26,14 @@
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr } from "$/utils/i18n";
   import { Toasts } from "$/utils/toasts";
+  import { untrack } from "svelte";
+  import { csvSource, loadCsvSource } from "$/stores/csv_source";
+  import { get } from "svelte/store";
+  import { applyOperator } from "$/utils/operator";
+  import { operatorName } from "$/stores/app";
   import {
     autoBind,
     findMissingRequired,
-    parseCsv,
     resolveVariables,
     serialValue,
     type CsvRow,
@@ -54,12 +63,27 @@
     /** The canvas document with assets already resolved to data URLs. */
     fabricJson: FabricJson;
     labelProps: LabelProps;
+    /**
+     * The variables the designer has declared, live.
+     *
+     * Unlike `template`, this is read as it changes rather than snapshotted:
+     * loading a spreadsheet lays fields onto the canvas, and when that
+     * happens while this dialog is open the new variables have to reach it.
+     */
+    declaredVariables?: TemplateVariable[];
     /** Called when the user changes the binding, so it can be persisted. */
     onBindingChanged?: (variables: TemplateVariables) => void;
     onClose?: () => void;
   }
 
-  let { template, fabricJson, labelProps, onBindingChanged, onClose }: Props = $props();
+  let {
+    template,
+    fabricJson,
+    labelProps,
+    declaredVariables,
+    onBindingChanged,
+    onClose,
+  }: Props = $props();
 
   /**
    * The dialog works on a snapshot of the template taken when it opens.
@@ -71,11 +95,14 @@
 
   let modalRef: AppModal;
 
-  let csvText = $state<string>("");
-  let columns = $state<string[]>([]);
-  let rows = $state<CsvRow[]>([]);
-  let parseErrors = $state<string[]>([]);
-  let delimiter = $state<string>(",");
+  /** The loaded spreadsheet, read rather than re-parsed. */
+  const columns = $derived($csvSource?.columns ?? []);
+  const rows = $derived<CsvRow[]>($csvSource?.rows ?? []);
+  const parseErrors = $derived($csvSource?.errors ?? []);
+  const delimiter = $derived($csvSource?.delimiter ?? ",");
+
+  /** Text being pasted in, before it becomes the loaded spreadsheet. */
+  let pasted = $state<string>("");
 
   let variables = $state<TemplateVariable[]>(initial.template.variables?.variables ?? []);
   let binding = $state<Record<string, string>>({ ...(initial.template.variables?.csv_mapping ?? {}) });
@@ -203,6 +230,42 @@
     }
   });
 
+  /**
+   * Variables the designer declares while this dialog is open.
+   *
+   * The rest of the dialog works from the snapshot it opened with, which is
+   * right for a form the user is filling in and wrong for this one thing:
+   * loading a spreadsheet puts its fields on the canvas, so the variables
+   * can appear *after* the dialog did. A dialog that could not see them
+   * would show "this template declares no variables" about a label that had
+   * just grown four of them, and refuse to print.
+   *
+   * Only ever adds. A variable the user has already configured here, and a
+   * column they have bound by hand, are left exactly as they are.
+   */
+  $effect(() => {
+    const declared = declaredVariables ?? [];
+
+    if (declared.length === 0) {
+      return;
+    }
+
+    untrack(() => {
+      const known = variables.map((v) => v.name);
+      const missing = declared.filter((variable) => !known.includes(variable.name));
+
+      if (missing.length === 0) {
+        return;
+      }
+
+      variables = [...variables, ...missing];
+      // The new variables are named after the spreadsheet's own columns, so
+      // the match is the identity. Binding them here is what stops the user
+      // having to press "auto-match" for fields the app itself just made.
+      binding = autoBind(get(csvSource)?.columns ?? [], variables, binding);
+    });
+  });
+
   const effectiveVariables = $derived<TemplateVariables>({
     variables,
     csv_mapping: binding,
@@ -233,38 +296,61 @@
       return;
     }
 
-    csvText = await file.text();
-    parseCsvText();
+    // Loaded into the shared source, so the designer's canvas is showing the
+    // same spreadsheet this batch is about to print from.
+    loadCsvSource(file.name, await file.text());
+    pasted = "";
     input.value = "";
   };
 
-  const parseCsvText = () => {
-    if (csvText.trim() === "") {
-      columns = [];
-      rows = [];
-      parseErrors = [];
+  const onUsePasted = () => {
+    if (pasted.trim() === "") {
       return;
     }
 
-    const parsed = parseCsv(csvText);
-    columns = parsed.columns;
-    rows = parsed.rows;
-    parseErrors = parsed.errors;
-    delimiter = parsed.delimiter;
-
-    // Keep only bindings whose column still exists.
-    const pruned: Record<string, string> = {};
-    for (const [variable, column] of Object.entries(binding)) {
-      if (columns.includes(column)) {
-        pruned[variable] = column;
-      }
-    }
-    binding = pruned;
-
-    page = 0;
-    selectedRow = -1;
-    rowStates = [];
+    loadCsvSource($tr("fields.pasted"), pasted);
   };
+
+  /**
+   * Follow the loaded spreadsheet.
+   *
+   * A different file means a different set of columns, so a binding pointing
+   * at a column that is no longer there is dropped rather than resolving to
+   * nothing on a printed label, and anything already queued is forgotten.
+   */
+  let seenSource: unknown = undefined;
+
+  $effect(() => {
+    const source = $csvSource;
+
+    if (source === seenSource) {
+      return;
+    }
+
+    seenSource = source;
+
+    untrack(() => {
+      const names = source?.columns ?? [];
+      const pruned: Record<string, string> = {};
+
+      for (const [variable, column] of Object.entries(binding)) {
+        if (names.includes(column)) {
+          pruned[variable] = column;
+        }
+      }
+
+      // Bound straight away rather than waiting for the user to press
+      // "auto-match". Fields generated from a CSV are named after its own
+      // columns, so the match is the identity and asking for it would be
+      // asking the user to confirm that `lot` is `lot`. A binding they set
+      // themselves still wins: `autoBind` only fills what is unbound.
+      binding = autoBind(source?.columns ?? [], variables, pruned);
+
+      page = 0;
+      selectedRow = -1;
+      rowStates = [];
+    });
+  });
 
   const onAutoBind = () => {
     binding = autoBind(columns, variables, binding);
@@ -284,12 +370,24 @@
     notifyBindingChanged();
   };
 
+  /**
+   * The values one row prints with.
+   *
+   * The row's own columns, the serial number for its position in the run,
+   * and the operator name this workstation supplies — unless a column is
+   * bound to `operator`, in which case the spreadsheet is stating who it was
+   * and wins.
+   */
   const resolvedFor = (row: CsvRow, index: number): Record<string, string> =>
-    resolveVariables(
-      row,
-      variables,
+    applyOperator(
+      resolveVariables(
+        row,
+        variables,
+        binding,
+        serialEnabled && serialVariable !== "" ? { config: serialConfig(), index } : undefined,
+      ),
+      $operatorName,
       binding,
-      serialEnabled && serialVariable !== "" ? { config: serialConfig(), index } : undefined,
     );
 
   const onPreviewRow = async (index: number) => {
@@ -479,22 +577,31 @@
             class="d-none"
             onchange={onImportFile} />
         </label>
-        <button class="btn btn-sm btn-outline-secondary" onclick={parseCsvText} disabled={csvText.trim() === ""}>
-          <MdIcon icon="refresh" />
-          {$tr("batch.parse")}
-        </button>
         <button class="btn btn-sm btn-outline-secondary" onclick={onAutoBind} disabled={columns.length === 0}>
           <MdIcon icon="link" />
           {$tr("batch.auto_bind")}
         </button>
       </div>
 
-      <textarea
-        class="form-control dsv mb-2"
-        rows="6"
-        placeholder={$tr("batch.paste_csv")}
-        bind:value={csvText}
-        onchange={parseCsvText}></textarea>
+      {#if $csvSource !== undefined}
+        <div class="small mb-2">
+          {$tr("batch.source")}: <strong>{$csvSource.name}</strong>
+        </div>
+      {:else}
+        <div class="small text-muted mb-1">{$tr("batch.no_source")}</div>
+        <textarea
+          class="form-control dsv mb-2"
+          rows="6"
+          placeholder={$tr("batch.paste_csv")}
+          bind:value={pasted}></textarea>
+        <button
+          class="btn btn-sm btn-outline-secondary mb-2"
+          disabled={pasted.trim() === ""}
+          onclick={onUsePasted}>
+          <MdIcon icon="playlist_add" />
+          {$tr("fields.use_pasted")}
+        </button>
+      {/if}
 
       <div class="small text-muted mb-2">
         {$tr("batch.rows")}: <strong>{rows.length}</strong>

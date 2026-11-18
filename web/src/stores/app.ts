@@ -1,10 +1,8 @@
 import { derived, get, readable, writable } from "svelte/store";
 import {
   AppConfigSchema,
-  CsvParamsSchema,
   UserFontSchema,
   UserIconSchema,
-  type CsvParams,
   type UserFont,
   type UserIcon,
   type AppConfig,
@@ -25,7 +23,7 @@ import {
   createPrinterInfo,
 } from "@mmote/niimbluelib";
 import { LocalStoragePersistence, writablePersisted } from "$/utils/persistence";
-import { APP_CONFIG_DEFAULTS, CSV_DEFAULT, OBJECT_DEFAULTS_TEXT } from "$/defaults";
+import { APP_CONFIG_DEFAULTS, OBJECT_DEFAULTS_TEXT } from "$/defaults";
 import z from "zod";
 import { FileUtils } from "$/utils/file_utils";
 import { connectedPrinterFor } from "$/utils/printer_profile";
@@ -52,7 +50,25 @@ export const printerMeta = writable<PrinterModelMeta | undefined>();
  */
 export const printerProfile = derived(printerMeta, ($printerMeta) => connectedPrinterFor($printerMeta));
 export const heartbeatFails = writable<number>(0);
-export const csvData = writablePersisted<CsvParams>("csv_params", CsvParamsSchema, { data: CSV_DEFAULT });
+/**
+ * Who is at this workstation.
+ *
+ * Persisted per browser, because that is all it can honestly be: the app has
+ * no users to authenticate, so this is a name the lab types once on the
+ * machine beside the printer. It reaches the label as `{operator}`.
+ */
+export const operatorName = writablePersisted<string>("operator_name", z.string().max(64), "");
+
+// The design-time CSV textarea used to persist its contents here, and the
+// print preview ran its own batch from them. Both are gone: one CSV is
+// loaded into `csvSource` and every path reads that. The key is cleared so a
+// stale spreadsheet from before the change cannot sit in localStorage
+// forever with nothing able to show it.
+try {
+  localStorage.removeItem("csv_params");
+} catch {
+  // A browser with storage blocked has nothing to clear.
+}
 export const dimensionsUpdateRequest = writable<{width: number, height: number} | null>(null);
 
 userFonts.subscribe(FileUtils.loadFonts);

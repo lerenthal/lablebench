@@ -14,7 +14,7 @@ import { CustomCanvas } from "$/fabric-object/custom_canvas";
 import { Capacitor } from "@capacitor/core";
 import { CanvasUtils } from "$/utils/canvas_utils";
 import { LocalStoragePersistence } from "./persistence";
-import { csvData, loadedFonts } from "$/stores/app";
+import { loadedFonts } from "$/stores/app";
 import { get } from "svelte/store";
 
 export class FileUtils {
@@ -186,7 +186,15 @@ export class FileUtils {
     return out.toDataURL("image/png");
   }
 
-  static makeExportedLabel(canvas: fabric.Canvas, labelProps: LabelProps, includeCsv: boolean): ExportedLabelTemplate {
+  /**
+   * The template as it is saved or exported.
+   *
+   * It used to be able to carry a copy of the design-time CSV. It no longer
+   * does: the data is loaded per session and the template keeps the column
+   * *bindings*, so a template cannot ship a stale spreadsheet inside itself
+   * and then print from it months later.
+   */
+  static makeExportedLabel(canvas: fabric.Canvas, labelProps: LabelProps): ExportedLabelTemplate {
     const thumbnailBase64: string = FileUtils.makeThumbnail(canvas);
 
     const tpl: ExportedLabelTemplate = {
@@ -195,10 +203,6 @@ export class FileUtils {
       thumbnailBase64,
       timestamp: FileUtils.timestamp(),
     };
-
-    if (includeCsv) {
-      tpl.csv = get(csvData);
-    }
 
     tpl.id = LocalStoragePersistence.createUidForLabel(tpl);
 

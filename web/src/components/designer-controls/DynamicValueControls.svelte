@@ -7,7 +7,15 @@
     dateTimeToken,
     parseDynamicToken,
     preprocessDateTime,
+    substituteTokens,
   } from "$/utils/dynamic_values";
+  import {
+    fieldTextHasHeader,
+    headingOfFieldText,
+    withHeader,
+    withHeading,
+  } from "$/utils/csv_fields";
+  import { previewValues } from "$/stores/csv_source";
   import type { SerialConfig } from "$/types";
   import SerialConfigControls from "$/components/designer-controls/SerialConfigControls.svelte";
 
@@ -34,7 +42,17 @@
   const tokenOf = (obj: fabric.FabricObject | undefined): string =>
     obj instanceof TextboxExt ? (obj.dynamicToken ?? obj.text ?? "") : "";
 
-  const parsed = $derived(parseDynamicToken(tokenOf(selectedObject)));
+  /**
+   * The token lives on a fabric object, which is not reactive state, so
+   * nothing here would notice this panel's own edits. `editRevision` is the
+   * signal the designer bumps whenever an object changes, so it is read to
+   * make the panel follow the object it is showing.
+   */
+  const parsed = $derived.by(() => {
+    void editRevision;
+
+    return parseDynamicToken(tokenOf(selectedObject));
+  });
 
   const isDate = $derived(parsed?.kind === "date");
 
@@ -44,9 +62,30 @@
       parsed.name === serialConfig?.variable,
   );
 
+  const isField = $derived(
+    parsed?.kind === "variable" && parsed.name !== undefined && !isSerial,
+  );
+
   const currentFormat = $derived(isDate ? (parsed?.format ?? "") : "");
 
+  /**
+   * A field: a merge variable that is not the serial number.
+   *
+   * Every such object carries its value and, optionally, its heading in one
+   * string, so this panel is where the heading is turned on, off or reworded.
+   * It is read back out of the text each time rather than kept beside it: a
+   * flag could come to disagree with what the label actually says.
+   */
+  const fieldText = $derived.by(() => {
+    void editRevision;
+
+    return isField ? tokenOf(selectedObject) : "";
+  });
+  const fieldColumn = $derived(isField ? (parsed?.name ?? "") : "");
+  const headingShown = $derived(isField ? fieldTextHasHeader(fieldText) : false);
+
   let formatInput = $state("");
+  let headingInput = $state("");
 
   $effect(() => {
     // editRevision is read so the panel follows the selected object.
@@ -55,7 +94,32 @@
     if (currentFormat !== formatInput) {
       formatInput = currentFormat;
     }
+
+    const heading = headingOfFieldText(fieldText) ?? "";
+
+    if (heading !== headingInput) {
+      headingInput = heading;
+    }
   });
+
+  /**
+   * Put a new field text on the object, and show what it would print.
+   *
+   * The token goes on `dynamicToken` and the resolved value on the canvas,
+   * which is the same arrangement every dynamic object uses. Resolving here
+   * rather than waiting for the next refresh is what makes the toggle feel
+   * like a toggle: the heading appears on the label as it is switched on.
+   */
+  const applyFieldText = (text: string) => {
+    if (!(selectedObject instanceof TextboxExt)) {
+      return;
+    }
+
+    selectedObject.dynamicToken = text;
+    selectedObject.set({ text: substituteTokens(text, $previewValues) });
+    headingInput = headingOfFieldText(text) ?? "";
+    valueUpdated();
+  };
 
   const applyFormat = (format: string) => {
     if (!(selectedObject instanceof TextboxExt)) {
@@ -94,6 +158,38 @@
     <div class="small text-muted mt-2">
       {$tr("params.datetime.preview")}: <code>{preprocessDateTime(formatInput)}</code>
     </div>
+  </div>
+{/if}
+
+{#if isField}
+  <div class="mb-3">
+    <h6 class="small text-uppercase">{$tr("params.field.title")}</h6>
+
+    <div class="small">
+      {$tr("params.field.bound")}: <code>{`{${fieldColumn}}`}</code>
+    </div>
+
+    <div class="form-check form-switch mt-2">
+      <input
+        class="form-check-input"
+        type="checkbox"
+        role="switch"
+        id="field-heading-shown"
+        checked={headingShown}
+        onchange={(e) => applyFieldText(withHeader(fieldText, e.currentTarget.checked))} />
+      <label class="form-check-label small" for="field-heading-shown">
+        {$tr("params.field.show_heading")}
+      </label>
+    </div>
+
+    <label class="form-label small mt-2" for="field-heading">{$tr("params.field.heading")}</label>
+    <input
+      id="field-heading"
+      class="form-control form-control-sm"
+      type="text"
+      bind:value={headingInput}
+      onchange={() => applyFieldText(withHeading(fieldText, headingInput))} />
+    <div class="small text-muted mt-1">{$tr("params.field.heading_hint")}</div>
   </div>
 {/if}
 

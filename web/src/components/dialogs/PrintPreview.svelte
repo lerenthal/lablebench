@@ -44,7 +44,7 @@
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import { canvasPreprocess } from "$/utils/canvas_preprocess";
-  import { type DSVRowArray, csvParse } from "d3-dsv";
+  import { csvPreviewRow, csvSource, previewValues } from "$/stores/csv_source";
   import { LocalStoragePersistence } from "$/utils/persistence";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { Toasts } from "$/utils/toasts";
@@ -57,8 +57,6 @@
     canvasCallback: () => FabricJson;
     onClose?: () => void;
 
-    csvData: string;
-    csvEnabled: boolean;
     /** The model this template targets. Used to check the label against its own model's head. */
     model?: TemplateModel;
     /** The template's serial sequence, when it has one. */
@@ -68,9 +66,6 @@
   let {
     labelProps,
     canvasCallback,
-
-    csvData,
-    csvEnabled,
     model,
     serialConfig,
     onClose,
@@ -100,9 +95,16 @@
       ? $printerClient.getPrintTaskType()
       : undefined,
   );
-  let csvParsed: DSVRowArray<string>;
-  let currentPage = $state<number>(0);
-  let pagesTotal = $state<number>(1);
+  /**
+   * How many rows the loaded spreadsheet holds.
+   *
+   * The preview shows one of them so the user can look at a real label
+   * before committing a tray of them. Printing from here prints *that* one.
+   * Printing all the rows is the batch dialog's job, and used to be this
+   * dialog's as well: there were two batch engines, which is how the app
+   * came to disagree with itself about how many labels a CSV meant.
+   */
+  const csvRowCount = $derived($csvSource?.rows.length ?? 0);
   let warnings = $state<string[]>([]);
   /**
    * §5.1: the raster must never be wider than the print head.
@@ -201,15 +203,9 @@
   };
 
   const onPrintOnSystemPrinter = async () => {
-    const sources: string[] = [];
+    await generatePreviewData();
 
-    for (let curPage = 0; curPage < pagesTotal; curPage++) {
-      currentPage = curPage;
-      await generatePreviewData(currentPage);
-      sources.push(previewCanvas.toDataURL("image/png"));
-    }
-
-    FileUtils.printImageUrls(sources);
+    FileUtils.printImageUrls([previewCanvas.toDataURL("image/png")]);
   };
 
   /**
@@ -225,15 +221,12 @@
 
     printState = "printing";
     error = "";
-    logInfo(
-      "print",
-      `Printing on the NIIMBOT: ${pagesTotal} page(s), ${params.quantity} copy/copies`,
-    );
+    logInfo("print", `Printing on the NIIMBOT: ${params.quantity} copy/copies`);
 
     $printerClient.stopHeartbeat();
 
     const opts: Partial<PrintOptions> = {
-      totalPages: pagesTotal * params.quantity,
+      totalPages: params.quantity,
       density: params.density,
       speed: params.speed,
       labelType: printLabelType,
@@ -278,37 +271,30 @@
     try {
       await currentPrintTask.printInit();
 
-      for (let pageIdx = 0; pageIdx < pagesTotal; pageIdx++) {
-        currentPage = pageIdx;
-        console.log("Printing page", currentPage);
+      if (serialConfig === undefined) {
+        // No serial sequence: one raster, all the copies.
+        await generatePreviewData();
 
-        if (serialConfig === undefined) {
-          // No serial sequence: one raster, all the copies, exactly as before.
-          await generatePreviewData(currentPage);
-
-          // Never send an over-wide raster. The check runs per page, because
-          // the pages of a multi-page label can differ.
-          if (widthBlocked !== "") {
-            throw new Error(widthBlocked);
-          }
-
-          const encoded: EncodedImage = ImageEncoder.encodeCanvas(
-            previewCanvas,
-            opts.pageColor!,
-            labelProps.printDirection,
-          );
-
-          await currentPrintTask.printPage(encoded, params.quantity);
-          await currentPrintTask.waitForPageFinished();
-          continue;
+        // Never send an over-wide raster.
+        if (widthBlocked !== "") {
+          throw new Error(widthBlocked);
         }
 
+        const encoded: EncodedImage = ImageEncoder.encodeCanvas(
+          previewCanvas,
+          opts.pageColor!,
+          labelProps.printDirection,
+        );
+
+        await currentPrintTask.printPage(encoded, params.quantity);
+        await currentPrintTask.waitForPageFinished();
+      } else {
         // A serial sequence means every copy is its own label, so each one
         // takes the next number from the central counter.
         for (let copy = 0; copy < params.quantity; copy++) {
           const serialValues = await allocateSerialValues(serialConfig);
 
-          await generatePreviewData(currentPage, serialValues);
+          await generatePreviewData(serialValues);
 
           if (widthBlocked !== "") {
             throw new Error(widthBlocked);
@@ -519,26 +505,16 @@
     }
   };
 
-  const pageDown = () => {
-    if (!csvEnabled) {
-      currentPage = 0;
+  const stepRow = (by: number) => {
+    if (csvRowCount === 0) {
       return;
     }
-    currentPage = Math.max(0, Math.min(csvParsed.length - 1, currentPage - 1));
-    generatePreviewData(currentPage);
-  };
 
-  const pageUp = () => {
-    if (!csvEnabled) {
-      currentPage = 0;
-      return;
-    }
-    currentPage = Math.min(csvParsed.length - 1, currentPage + 1);
-    generatePreviewData(currentPage);
+    csvPreviewRow.set(Math.min(csvRowCount - 1, Math.max(0, $csvPreviewRow + by)));
+    void generatePreviewData();
   };
 
   const generatePreviewData = async (
-    page: number,
     serialValues?: Record<string, string>,
   ): Promise<void> => {
     const fabricTempCanvas = new CustomCanvas(undefined, {
@@ -553,15 +529,10 @@
 
     await fabricTempCanvas.loadFromJSON(canvasCallback());
 
-    let variables: Record<string, string> = {};
-
-    if (csvEnabled) {
-      if (page >= 0 && page < csvParsed.length) {
-        variables = { ...(csvParsed[page] as Record<string, string>) };
-      } else {
-        console.warn(`Page ${page} is out of csv bounds (csv length is ${csvParsed.length})`);
-      }
-    }
+    // The row being previewed, plus the fields this workstation supplies.
+    // The same store the design canvas draws from, so the two cannot show
+    // the user different labels.
+    let variables: Record<string, string> = { ...$previewValues };
 
     // The serial number comes from the central counter. When the print path
     // hands a value in, that number has already been taken; when it does not,
@@ -605,38 +576,6 @@
   };
 
   onMount(async () => {
-    if (csvEnabled) {
-      const parseResult = csvParse(csvData);
-      const spread: DSVRowArray<string> = Object.assign([], { columns: parseResult.columns });
-
-      for (let row of parseResult) {
-        for (const k of Object.keys(row)) {
-          row[k] = row[k].replaceAll("\\n", "\n");
-        }
-
-        let times = 1;
-
-        if ("$times" in row && row["$times"] !== "") {
-          try {
-            times = parseInt(row["$times"]);
-          } catch (e) {
-            console.warn("$times parse error", e);
-          }
-        }
-
-        if (times < 0) {
-          times = 0;
-        }
-
-        for (let i = 0; i < times; i++) {
-          spread.push(row);
-        }
-      }
-
-      csvParsed = spread;
-      pagesTotal = csvParsed.length;
-    }
-
     if (detectedPrintTaskName !== undefined) {
       console.log(`Detected print task version: ${detectedPrintTaskName}`);
       params.printTaskName = detectedPrintTaskName;
@@ -669,29 +608,38 @@
       params.printTaskName = detectedPrintTaskName;
     }
 
-    await generatePreviewData(currentPage);
+    await generatePreviewData();
   });
 </script>
 
 <AppModal title={$tr("preview.title")} onClose={onModalClose} bind:this={modalRef} size="lg">
   <div class="d-flex justify-content-center">
-    {#if pagesTotal > 1}
-      <button disabled={printState !== "idle"} class="btn w-100 fs-1" onclick={pageDown}>
+    {#if csvRowCount > 1}
+      <button
+        disabled={printState !== "idle" || $csvPreviewRow <= 0}
+        class="btn w-100 fs-1"
+        onclick={() => stepRow(-1)}>
         <MdIcon icon="chevron_left" />
       </button>
     {/if}
 
     <canvas class="print-start-{labelProps.printDirection}" bind:this={previewCanvas}></canvas>
 
-    {#if pagesTotal > 1}
-      <button disabled={printState !== "idle"} class="btn w-100 fs-1" onclick={pageUp}>
+    {#if csvRowCount > 1}
+      <button
+        disabled={printState !== "idle" || $csvPreviewRow >= csvRowCount - 1}
+        class="btn w-100 fs-1"
+        onclick={() => stepRow(1)}>
         <MdIcon icon="chevron_right" />
       </button>
     {/if}
   </div>
 
   <div class="text-center">
-    {#if pagesTotal > 1}<div>Page {currentPage + 1} / {pagesTotal}</div>{/if}
+    {#if csvRowCount > 1}
+      <div>{$tr("fields.preview_row")}: {$csvPreviewRow + 1} / {csvRowCount}</div>
+      <div class="small text-muted">{$tr("preview.one_row")}</div>
+    {/if}
 
     {#if printState === "printing"}
       <div>

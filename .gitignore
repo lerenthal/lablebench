@@ -36,3 +36,6 @@ backups/
 # Scratch directories used while working out a geometry problem.
 .probe/
 .web/
+
+# LibreOffice leaves a lock file beside any spreadsheet it has open.
+.~lock.*#

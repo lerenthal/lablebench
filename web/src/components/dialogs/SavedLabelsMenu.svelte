@@ -29,11 +29,10 @@
     onClose?: () => void;
     onSave?: () => void;
     canvas: fabric.Canvas;
-    csvEnabled: boolean;
     hasUnsavedChanges: boolean;
   }
 
-  let { onRequestLabelTemplate, onLoadRequested, canvas, csvEnabled, onClose, onSave, hasUnsavedChanges }: Props =
+  let { onRequestLabelTemplate, onLoadRequested, canvas, onClose, onSave, hasUnsavedChanges }: Props =
     $props();
 
   let savedLabels = $state<TemplateListItem[]>([]);
@@ -387,12 +386,6 @@
       {$tr("templates.server")}
     {:else}
       {$tr("templates.list")}: <strong>{savedLabels.length}</strong>
-    {/if}
-
-    {#if csvEnabled}
-      <div class="pt-1 text-warning">
-        {$tr("params.saved_labels.save.withcsv")}
-      </div>
     {/if}
   </div>
 
