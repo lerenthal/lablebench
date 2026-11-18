@@ -13,9 +13,11 @@
 
 import {
   LabelType,
+  findPrintTask,
   type PaperInfo,
   type PrinterModel,
   type PrinterModelMeta,
+  type PrintTaskName,
 } from "@mmote/niimbluelib";
 import type { TemplateModel } from "$/types";
 
@@ -30,46 +32,70 @@ export const dpmmForDpi = (dpi: number | undefined): number =>
   dpi !== undefined && dpi >= 250 ? 11.81 : 8;
 
 /**
- * The two families of printer the app knows how to design for.
+ * The printer a template was drawn for.
  *
- * A D11 has a 96 px (12 mm) print head and feeds the label the way the
- * design is drawn. A B21 has a 384 px (48 mm) head and takes the label the
- * other way round, so a design for one is the other turned a quarter.
+ * This used to be one of two families, `d11` or `b21`, chosen from two
+ * hand-written lists of model names. Those lists were the only thing stopping
+ * the app designing for the other printers: the library describes 77 models
+ * and can build a print task for every one of them, and the three facts the
+ * app needs from a printer - how many dots its head is, which way it feeds a
+ * label, and what resolution it prints at - are reported by the printer
+ * itself. The family name carried no information the printer had not already
+ * given, so it was turning 62 perfectly drivable printers away for nothing.
  *
- * The families are the same as the head widths and feed directions, so a
- * printer is placed by what it can actually do rather than by its name.
+ * A template now records the library's own model id, and the geometry it was
+ * drawn at is stored beside it as millimetres and a feed direction. The model
+ * is therefore a note about where the design came from, not a constraint: the
+ * connected printer is what decides whether a label can be printed, and the
+ * width check already measures against the head in front of it.
+ *
+ * `d11` and `b21` are still read, because templates saved before this carry
+ * them.
  */
-const D11_FAMILY = new Set<PrinterModel>([
-  "D11" as PrinterModel,
-  "D11S" as PrinterModel,
-  "D11_H" as PrinterModel,
-  "D11_PRO" as PrinterModel,
-  "D110" as PrinterModel,
-  "D110_M" as PrinterModel,
-  "HI_NB_D11" as PrinterModel,
-]);
+const LEGACY_FAMILY_MODELS: Record<string, string> = {
+  d11: "D11",
+  b21: "B21",
+};
 
-const B21_FAMILY = new Set<PrinterModel>([
-  "B21" as PrinterModel,
-  "B21S" as PrinterModel,
-  "B21_PRO" as PrinterModel,
-  "B21_C2B" as PrinterModel,
-  "B21_L2B" as PrinterModel,
-  "B21S_C2B" as PrinterModel,
-  "B1" as PrinterModel,
-  "B11" as PrinterModel,
-]);
+/**
+ * The library model id a stored template's model refers to.
+ *
+ * Returns the id unchanged for anything the library might know, and maps the
+ * two old family names onto the model each one stood for.
+ */
+export const libraryModelFor = (model: TemplateModel | undefined): string | undefined => {
+  if (model === undefined || model === "") return undefined;
+  return LEGACY_FAMILY_MODELS[model] ?? model;
+};
 
-/** The model family a printer belongs to, or undefined if it is not one the app designs for. */
-export const familyForModel = (model: PrinterModel): TemplateModel | undefined => {
-  if (D11_FAMILY.has(model)) return "d11";
-  if (B21_FAMILY.has(model)) return "b21";
-  return undefined;
+/**
+ * The print task a model's template would use, when no printer is connected.
+ *
+ * The protocol is properly a question for the printer: `getPrintTaskType()`
+ * answers it from the model *and* the firmware's protocol version, and a D11
+ * answers `D110` on version 1 and 2 but `D11_V1` from 3 on. So this is only
+ * the stand-in shown before anything is plugged in, and it is deliberately
+ * allowed to be undefined: guessing a protocol means sending one printer
+ * another's packets, which is worse than admitting we do not know yet.
+ *
+ * Printing itself always uses the connected printer's own answer.
+ */
+export const printTaskForModel = (
+  model: TemplateModel | undefined,
+): PrintTaskName | undefined => {
+  const id = libraryModelFor(model);
+  if (id === undefined) return undefined;
+
+  try {
+    return findPrintTask(id as PrinterModel);
+  } catch {
+    return undefined;
+  }
 };
 
 /** Everything the app needs to know about the printer it is talking to. */
 export interface ConnectedPrinter {
-  /** The family the app designs for. */
+  /** The library's own model id, which is what a template records. */
   model: TemplateModel;
   /** The printer's own model, as the library calls it. */
   libraryModel: PrinterModel;
@@ -92,22 +118,21 @@ export interface ConnectedPrinter {
 /**
  * Read a connected printer out of the metadata the library fetched for it.
  *
- * Returns undefined when the printer is not one of the families the app
- * designs for — the app still prints on it, but the label geometry the app
- * offers would be a guess, so it is better to say so than to pretend.
+ * Any printer the library describes is one the app can design for, because
+ * everything the design needs is in that description. Undefined means the
+ * library had nothing to say about this printer at all - not that the app
+ * refuses it - and in that case there is no head width to check a label
+ * against, so the app has to say it does not know rather than guess.
  */
 export const connectedPrinterFor = (
   meta: PrinterModelMeta | undefined,
 ): ConnectedPrinter | undefined => {
   if (meta === undefined) return undefined;
 
-  const model = familyForModel(meta.model);
-  if (model === undefined) return undefined;
-
   const dpmm = dpmmForDpi(meta.dpi);
 
   return {
-    model,
+    model: String(meta.model),
     libraryModel: meta.model,
     headPixels: meta.printheadPixels,
     headMm: Math.round((meta.printheadPixels / dpmm) * 10) / 10,

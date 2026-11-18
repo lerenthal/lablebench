@@ -10,7 +10,13 @@
    * a CSV of the same shape just works.
    */
   import { PageColorType, type PrintTaskName } from "@mmote/niimbluelib";
-  import { connectionState, printerClient, printerProfile, rfidInfo } from "$/stores/app";
+  import {
+    connectionState,
+    printerClient,
+    printerMeta,
+    printerProfile,
+    rfidInfo,
+  } from "$/stores/app";
   import AppModal from "$/components/basic/AppModal.svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr } from "$/utils/i18n";
@@ -33,7 +39,7 @@
     import { DEFAULT_RENDER_PARAMS, renderLabelCanvas, type RenderParams } from "$/utils/label_render";
   import { extractVariablesFromJson } from "$/utils/canvas_preprocess";
   import { headMmForModel } from "$/utils/print_limits";
-  import { resolveLabelType } from "$/utils/printer_profile";
+  import { printTaskForModel, resolveLabelType } from "$/utils/printer_profile";
   import {
     type ExportedLabelTemplate,
     type FabricJson,
@@ -172,9 +178,19 @@
    * The template's target model is only a hint — the connected unit wins.
    */
   const detectedPrintTask = $derived<PrintTaskName | undefined>(
-    $printerClient?.getPrintTaskType?.() ?? undefined,
+    $printerClient !== undefined && $printerMeta !== undefined
+      ? $printerClient.getPrintTaskType()
+      : undefined,
   );
-  const printTaskName = $derived<PrintTaskName>(detectedPrintTask ?? "B1");
+  // With nothing connected there is nothing to detect and a batch cannot be
+  // printed anyway, so the stand-in is whatever the library says this model
+  // would use — looked up per model rather than guessed from two families,
+  // and left undefined when even the library cannot say without knowing the
+  // firmware's protocol version. Printing uses the connected printer's own
+  // answer, so an undefined stand-in only ever means "not known yet".
+  const printTaskName = $derived<PrintTaskName | undefined>(
+    detectedPrintTask ?? printTaskForModel(template.model),
+  );
 
   // The template's declared variables, falling back to whatever placeholders the
   // canvas actually uses.
@@ -317,6 +333,14 @@
 
     if (missing.length > 0) {
       batchError = $tr("batch.missing_required").replace("{names}", missing[0]!.join(", "));
+      return;
+    }
+
+    // Which protocol to speak is the printer's to say, and by here one is
+    // connected, so it has said. If it somehow has not, stop: a batch sent in
+    // the wrong protocol is a roll of wasted labels, not a failed request.
+    if (printTaskName === undefined) {
+      batchError = $tr("batch.unknown_protocol");
       return;
     }
 

@@ -35,16 +35,22 @@ export const CsvParamsSchema = z.object({
 });
 
 /**
- * Target printer model (§5.1 / §7).
- * `d11` = 96 px print head, `b21` = 384 px print head, both at 203 dpi (8 px/mm).
+ * The printer a template was drawn for: the library's own model id, such as
+ * `D11`, `B1` or `K3`.
+ *
+ * It was an enum of two families, which is what kept the app to two printers
+ * out of the 77 the library describes. It is a free string now because the
+ * list of models belongs to the library, not to this schema - pinning it here
+ * would mean this file had to be edited every time the library learned a new
+ * printer, which is exactly the coupling that caused the problem.
+ *
+ * Nothing is decided from this value. The geometry a template was drawn at is
+ * stored beside it (`label_w_mm`, `label_h_mm`, `orientation`), and what can
+ * actually be printed is decided by the printer that is connected. The old
+ * `d11` and `b21` are still accepted, because saved templates carry them.
  */
-export const TemplateModelSchema = z.enum(["d11", "b21"]);
+export const TemplateModelSchema = z.string().min(1).max(32);
 export type TemplateModel = z.infer<typeof TemplateModelSchema>;
-
-export const PRINT_HEAD_PIXELS: Record<TemplateModel, number> = {
-  d11: 96,
-  b21: 384,
-};
 
 /** A declared merge variable (§5.2). */
 export const TemplateVariableSchema = z.object({

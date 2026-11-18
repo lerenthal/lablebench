@@ -40,7 +40,7 @@
     printableWidthMm,
   } from "$/utils/print_limits";
   import { logInfo } from "$/utils/app_log";
-  import { resolveLabelType } from "$/utils/printer_profile";
+  import { printTaskForModel, resolveLabelType } from "$/utils/printer_profile";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import { canvasPreprocess } from "$/utils/canvas_preprocess";
@@ -87,7 +87,19 @@
   // eslint-disable-next-line no-undef
   let statusTimer: NodeJS.Timeout | undefined = undefined;
   let error = $state<string>("");
-  let detectedPrintTaskName: PrintTaskName | undefined = $printerClient?.getPrintTaskType();
+  /**
+   * The protocol the connected printer speaks.
+   *
+   * It is read from the printer rather than assumed, and it is derived
+   * rather than read once: the preview can be opened before the printer is
+   * connected, and a value read at that moment would be the default rather
+   * than the printer's own — which would send a D11 the packets of a B1.
+   */
+  let detectedPrintTaskName = $derived<PrintTaskName | undefined>(
+    $printerClient !== undefined && $printerMeta !== undefined
+      ? $printerClient.getPrintTaskType()
+      : undefined,
+  );
   let csvParsed: DSVRowArray<string>;
   let currentPage = $state<number>(0);
   let pagesTotal = $state<number>(1);
@@ -249,7 +261,19 @@
     $printerClient.on("printprogress", printListener);
     $printerClient.on("printpacketprogress", sendListener);
 
-    currentPrintTask = $printerClient.protocol.newPrintTask(params.printTaskName, opts);
+    // The protocol is the connected printer's, decided at the moment of the
+    // print. The preview may have been opened before the printer was
+    // connected, and the one that is connected now is the one that has to
+    // understand the packets. Falling back to the template's model is a
+    // per-model lookup, not a family guess; if neither can say, refuse rather
+    // than send a printer another model's packets.
+    const taskName = detectedPrintTaskName ?? printTaskForModel(model) ?? params.printTaskName;
+
+    if (taskName === undefined) {
+      throw new Error("Cannot tell which protocol this printer speaks.");
+    }
+
+    currentPrintTask = $printerClient.protocol.newPrintTask(taskName, opts);
 
     try {
       await currentPrintTask.printInit();

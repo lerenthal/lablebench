@@ -17,6 +17,17 @@
   import { tr } from "$/utils/i18n";
   import { Toasts } from "$/utils/toasts";
   import type { TemplateListItem } from "$/types";
+  import { libraryModelFor } from "$/utils/printer_profile";
+
+  /**
+   * The printer a template was drawn for, as a person reads it.
+   *
+   * This used to be a translated string, one key per model. There are 77
+   * models, so that list was never going to be kept up, and a model id is a
+   * product name rather than a word to translate. The old `d11` and `b21`
+   * come back as the models they stood for.
+   */
+  const modelLabel = (model: string): string => libraryModelFor(model) ?? model;
 
   interface Props {
     onClose?: () => void;
@@ -102,7 +113,7 @@
               <div class="fw-semibold small text-truncate" title={item.title}>{item.title}</div>
 
               <div class="text-secondary small">
-                {$tr(`model.${item.model}`)} · {sizeText(item)}
+                {modelLabel(item.model)} · {sizeText(item)}
               </div>
 
               {#if item.variable_names.length > 0}

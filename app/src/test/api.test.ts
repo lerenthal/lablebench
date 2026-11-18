@@ -72,12 +72,44 @@ describe("templates CRUD", () => {
   });
 
   it("rejects an invalid template", async () => {
+    // A negative label is not a label, whatever printer it claims to be for.
     const res = await app.inject({
       method: "POST",
       url: "/api/templates",
-      payload: { ...templatePayload, model: "nope" },
+      payload: { ...templatePayload, label_w_mm: -5 },
     });
     assert.equal(res.statusCode, 400);
+  });
+
+  it("rejects a template with no model at all", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/templates",
+      payload: { ...templatePayload, model: "" },
+    });
+    assert.equal(res.statusCode, 400);
+  });
+
+  it("stores a model it has never heard of", async () => {
+    // The server does not keep a list of printer models, because it never
+    // talks to a printer: the list belongs to the library in the browser, and
+    // duplicating it here would mean a server release every time that library
+    // learned a new model. So an id this server cannot place is still stored,
+    // and whether a label can actually be printed is settled in the browser
+    // against the printer in front of it.
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/templates",
+      payload: { ...templatePayload, name: "Drawn for a K3", model: "K3" },
+    });
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.json().template.model, "K3");
+
+    await app.inject({
+      method: "DELETE",
+      url: `/api/templates/${res.json().template.id}`,
+    });
   });
 
   it("lists templates with summaries", async () => {
