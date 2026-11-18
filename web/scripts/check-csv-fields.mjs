@@ -41,6 +41,7 @@ const fields = await load(join(WEB, "src/utils/csv_fields.ts"));
 const dynamic = await load(join(WEB, "src/utils/dynamic_values.ts"));
 const fit = await load(join(WEB, "src/utils/label_fit.ts"));
 const csv = await load(join(WEB, "src/utils/csv_batch.ts"));
+const operator = await load(join(WEB, "src/utils/operator.ts"));
 
 let failures = 0;
 
@@ -100,6 +101,53 @@ check("off, from a heading the user rewrote", fields.withHeader("Batch no. {lot}
 check("on again regenerates, it does not restore", fields.withHeader("{lot}", true), "Lot: {lot}");
 check("on, twice, is stable", fields.withHeader("Lot: {lot}", true), "Lot: {lot}");
 check("text that is not a field is left alone", fields.withHeader("Lot", true), "Lot");
+
+console.log("rewording a heading");
+// The toggle regenerates a heading from the column name; this is how a lab
+// that writes "Batch no." instead of "Lot" gets to say so without typing over
+// a live value on the canvas.
+check("the heading can be read back out", fields.headingOfFieldText("Lot: {lot}"), "Lot");
+check("a field showing none has an empty heading, not no heading",
+  fields.headingOfFieldText("{lot}"), "");
+check("text that is not a field has no heading at all",
+  fields.headingOfFieldText("Lot"), undefined);
+check("a reworded heading reads back as written",
+  fields.headingOfFieldText("Batch no.: {lot}"), "Batch no.");
+check("setting one keeps the token", fields.withHeading("{lot}", "Batch no."), "Batch no.: {lot}");
+check("replacing one does not stack separators",
+  fields.withHeading("Lot: {lot}", "Batch no."), "Batch no.: {lot}");
+check("an empty heading is the same as turning it off",
+  fields.withHeading("Lot: {lot}", ""), fields.withHeader("Lot: {lot}", false));
+check("surrounding space is not printed", fields.withHeading("{lot}", "  Lot  "), "Lot: {lot}");
+check("a heading on something that is not a field changes nothing",
+  fields.withHeading("Lot", "Batch"), "Lot");
+
+console.log("who printed it");
+// The app has no users, so {operator} is filled from a per-workstation
+// setting. A spreadsheet that records who prepared each row is stating a
+// fact about that row, so a bound column has to win over the setting.
+check(
+  "the workstation's operator fills the field",
+  operator.applyOperator({ lot: "SB-0412" }, "Yaniv"),
+  { lot: "SB-0412", operator: "Yaniv" },
+);
+check(
+  "an unset operator prints empty rather than the raw token",
+  operator.applyOperator({}, "").operator,
+  "",
+);
+check("surrounding space is not printed", operator.applyOperator({}, "  Yaniv  ").operator, "Yaniv");
+check(
+  "a CSV column bound to operator wins over the workstation",
+  operator.applyOperator({ operator: "Dana" }, "Yaniv", { operator: "who" }),
+  { operator: "Dana" },
+);
+check("the token is the one the pipeline substitutes", operator.operatorToken(), "{operator}");
+check(
+  "and it resolves like any other field",
+  dynamic.substituteTokens("Printed by: {operator}", operator.applyOperator({}, "Yaniv")),
+  "Printed by: Yaniv",
+);
 
 console.log("a heading and its token substitute together");
 // This is the whole reason the heading lives in the text. Replacing the

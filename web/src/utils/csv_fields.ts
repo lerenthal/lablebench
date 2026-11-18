@@ -198,3 +198,47 @@ export const layOutFields = (
     fontSize,
   }));
 };
+
+/**
+ * The heading a field's text carries, or undefined if it is not a field.
+ *
+ * Everything before the token is the heading, with the separator trimmed off.
+ * A field showing no heading has one of `""`, not `undefined` — `undefined`
+ * means "this text is not a field at all".
+ */
+export const headingOfFieldText = (text: string): string | undefined => {
+  const column = columnOfFieldText(text);
+
+  if (column === undefined) {
+    return undefined;
+  }
+
+  const tokenAt = text.indexOf("{");
+
+  if (tokenAt <= 0) {
+    return "";
+  }
+
+  return text.slice(0, tokenAt).replace(/[:\s]+$/, "").trim();
+};
+
+/**
+ * The same field with a heading of the user's own wording.
+ *
+ * The separator is added here rather than typed by the user, so every field
+ * on the label reads the same way round. An empty heading turns it off, which
+ * is the same thing `withHeader(text, false)` does - the toggle and the box
+ * are two ways to say one thing, and neither can disagree with the other
+ * because both are read back out of the text.
+ */
+export const withHeading = (text: string, heading: string): string => {
+  const column = columnOfFieldText(text);
+
+  if (column === undefined) {
+    return text;
+  }
+
+  const trimmed = heading.trim();
+
+  return trimmed === "" ? `{${column}}` : `${trimmed}${HEADER_SEPARATOR}{${column}}`;
+};

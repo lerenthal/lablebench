@@ -30,10 +30,6 @@ type _Range<T extends number, R extends unknown[]> = R["length"] extends T ? R[n
 
 export type Range<T extends number> = number extends T ? number : _Range<T, []>;
 
-export const CsvParamsSchema = z.object({
-  data: z.string(),
-});
-
 /**
  * The printer a template was drawn for: the library's own model id, such as
  * `D11`, `B1` or `K3`.
@@ -163,7 +159,6 @@ export const ExportedLabelTemplateSchema = z.object({
   title: z.string().optional(),
   timestamp: z.number().positive().optional(),
   id: z.string().optional(), // server template id (UUID) when loaded from the central store
-  csv: CsvParamsSchema.optional(),
 
   // --- LabelBench extensions ---
   /**
@@ -250,7 +245,6 @@ export const UserFontSchema = z.object({
 
 export type PostProcessType = z.infer<typeof PostProcessTypeSchema>;
 
-export type CsvParams = z.infer<typeof CsvParamsSchema>;
 export type UserIcon = z.infer<typeof UserIconSchema>;
 export type LabelProps = z.infer<typeof LabelPropsSchema>;
 export type LabelPreset = z.infer<typeof LabelPresetSchema>;

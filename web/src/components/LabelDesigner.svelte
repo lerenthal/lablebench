@@ -11,7 +11,6 @@
     appConfig,
     automation,
     connectionState,
-    csvData,
     dimensionsUpdateRequest,
     loadedFonts,
     printerProfile,
@@ -27,7 +26,7 @@
     type TemplateVariables,
   } from "$/types";
   import { FileUtils } from "$/utils/file_utils";
-  import { adaptContentToLabel, fitObjectsInsideLabel } from "$/utils/label_fit";
+  import { adaptContentToLabel, fitObjectsInsideLabel, printableArea } from "$/utils/label_fit";
   import { canvasForPrinter, loadedLabelFor } from "$/utils/printer_profile";
   import { tr } from "$/utils/i18n";
   import { LabelDesignerObjectHelper } from "$/utils/label_designer_object_helper";
@@ -35,7 +34,7 @@
   import { Toasts } from "$/utils/toasts";
   import { UndoRedo, type UndoState } from "$/utils/undo_redo";
   import BarcodeParamsPanel from "$/components/designer-controls/BarcodeParamsControls.svelte";
-  import CsvControl from "$/components/dialogs/CsvControl.svelte";
+  import CsvFieldsControl from "$/components/dialogs/CsvFieldsControl.svelte";
   import ClipboardControls from "$/components/designer-controls/ClipboardControls.svelte";
   import GenericObjectParamsControls from "$/components/designer-controls/GenericObjectParamsControls.svelte";
   import IconPicker from "$/components/dialogs/IconPicker.svelte";
@@ -56,6 +55,10 @@
     resolveDynamicObjects,
   } from "$/utils/dynamic_values";
   import { ensureObjectId, syncLinkedObjects } from "$/utils/linked_objects";
+  import { TextboxExt } from "$/fabric-object/textbox-ext";
+  import { csvSource, previewValues } from "$/stores/csv_source";
+  import { columnOfFieldText, fieldTextFor, layOutFields } from "$/utils/csv_fields";
+  import { operatorToken } from "$/utils/operator";
   import { clipboardKind, copyObject, copyObjectText, pasteObject, pasteText } from "$/utils/clipboard";
   import { api } from "$/services/api";
   import type { SerialConfig } from "$/types";
@@ -79,7 +82,7 @@
     | "preview"
     | "label_props"
     | "saved_labels"
-    | "csv_props"
+    | "csv_fields"
     | "csv_batch"
     | "quick_print"
     | "icon_picker"
@@ -104,7 +107,6 @@
   let selectedObject = $state<fabric.FabricObject | undefined>(undefined);
   let selectedCount = $state<number>(0);
   let editRevision = $state<number>(0);
-  let csvEnabled = $state<boolean>(false);
   /** What the next printed label would show for the serial variable. */
   let serialNextValue = $state<string | undefined>(undefined);
   let windowWidth = $state<number>(0);
@@ -131,10 +133,6 @@
     // also drove a DYMO; the resolution is carried alongside the size so the
     // two can never drift apart.
     onUpdateLabelProps({ ...data.label, dpmm: data.dpmm ?? data.label.dpmm ?? DEFAULT_DPMM });
-    if (data.csv) {
-      $csvData = data.csv;
-      csvEnabled = true;
-    }
     await FileUtils.loadCanvasState(fabricCanvas!, data.canvas);
     undo.paused = false;
   };
@@ -300,7 +298,7 @@
   };
 
   const exportCurrentLabel = (): ExportedLabelTemplate => {
-    const label = FileUtils.makeExportedLabel(fabricCanvas!, labelProps, csvEnabled);
+    const label = FileUtils.makeExportedLabel(fabricCanvas!, labelProps);
 
     // Carry the LabelBench fields: the target printer model, the declared
     // variables and their CSV bindings, and the tags.
@@ -431,7 +429,7 @@
     const config = templateVariables.serial;
 
     if (config === undefined) {
-      resolveDynamicObjects(fabricCanvas!, undefined, {});
+      resolveDynamicObjects(fabricCanvas!, undefined, {}, $previewValues);
       syncLinkedObjects(fabricCanvas!);
       fabricCanvas?.requestRenderAll();
       return;
@@ -457,6 +455,7 @@
       fabricCanvas!,
       config.variable,
       next === undefined ? {} : { [config.variable]: next },
+      $previewValues,
     );
 
     // A barcode that follows the serial number object has to be re-encoded
@@ -668,15 +667,117 @@
     return fabricCanvas!.toJSON();
   };
 
-  const onCsvPlaceholderPicked = (name: string) => {
-    const obj = LabelDesignerObjectHelper.addText(fabricCanvas!, `{${name}}`, {
-      textAlign: "left",
-      originX: "left",
-      originY: "top",
-    });
+  // --- fields from the spreadsheet ----------------------------------------
+  /** Which columns already have a field on the canvas. */
+  let fieldColumns = $state<string[]>([]);
+
+  const refreshFieldColumns = () => {
+    // Local to this call and thrown away at the end of it: what the dialog
+    // reads is `fieldColumns`, the array assigned below. A SvelteSet here
+    // would make a reactive object for one loop and discard it.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const found = new Set<string>();
+
+    for (const obj of fabricCanvas?.getObjects() ?? []) {
+      if (!(obj instanceof TextboxExt)) {
+        continue;
+      }
+
+      const column = columnOfFieldText(obj.dynamicToken ?? obj.text ?? "");
+
+      if (column !== undefined) {
+        found.add(column);
+      }
+    }
+
+    fieldColumns = [...found];
+  };
+
+  /**
+   * Lay out a field for every column of the loaded CSV.
+   *
+   * A column that already has a field is left exactly where the user put it:
+   * pressing this again after loading a wider spreadsheet adds what is new
+   * and disturbs nothing that has been positioned. The new ones are stacked
+   * inside the printable area, which on a round label is the square inside
+   * the circle rather than the canvas.
+   */
+  const onGenerateFields = (columns: string[], showHeadings: boolean) => {
+    refreshFieldColumns();
+
+    const missing = columns.filter((column) => !fieldColumns.includes(column));
+
+    if (missing.length === 0) {
+      return;
+    }
+
+    const area = printableArea(
+      labelProps.size.width,
+      labelProps.size.height,
+      labelProps.shape ?? "rect",
+    );
+
+    for (const box of layOutFields(missing, area)) {
+      LabelDesignerObjectHelper.addField(
+        fabricCanvas!,
+        fieldTextFor(box.column, showHeadings),
+        box,
+      );
+    }
+
+    discardSelection();
+    refreshFieldColumns();
+    refreshDeclaredVariables();
+    void refreshDynamicValues();
+    hasUnsavedChanges = true;
+    undo.push(fabricCanvas!, labelProps);
+    editRevision++;
+  };
+
+  /** One field, centred like any other newly added object. */
+  const onAddFieldColumn = (column: string, showHeading: boolean) => {
+    const obj = LabelDesignerObjectHelper.addField(
+      fabricCanvas!,
+      fieldTextFor(column, showHeading),
+    );
+
     fabricCanvas!.setActiveObject(obj);
+    refreshFieldColumns();
+    refreshDeclaredVariables();
+    void refreshDynamicValues();
+    hasUnsavedChanges = true;
     undo.push(fabricCanvas!, labelProps);
   };
+
+  /** The operator field: whoever this workstation says is at it. */
+  const onAddOperator = () => {
+    const obj = LabelDesignerObjectHelper.addField(fabricCanvas!, operatorToken());
+
+    fabricCanvas!.setActiveObject(obj);
+    refreshDeclaredVariables();
+    void refreshDynamicValues();
+    hasUnsavedChanges = true;
+    undo.push(fabricCanvas!, labelProps);
+  };
+
+  const openFieldsDialog = () => {
+    refreshFieldColumns();
+    currentDialog = "csv_fields";
+  };
+
+  /**
+   * Redraw the fields when the previewed row, or the operator's name,
+   * changes. The values live in a store, so the canvas follows them rather
+   * than each place that can change them having to remember to say so.
+   */
+  $effect(() => {
+    // Read so the effect re-runs when either changes.
+    void $previewValues;
+
+    if (fabricCanvas !== undefined) {
+      void refreshDynamicValues();
+    }
+  });
 
   const onPaste = async (event: ClipboardEvent) => {
     if (LabelDesignerUtils.isAnyInputFocused(fabricCanvas!)) {
@@ -1224,11 +1325,18 @@
         <div class="tool-group">
           <span class="tool-group__label">{$tr("editor.group.data")}</span>
           <div class="tool-group__buttons">
+            <!--
+              Where a spreadsheet becomes a label. This used to be an
+              unlabelled icon opening a textarea you pasted CSV into, which
+              is why nobody found it and why the batch dialog had to ask for
+              the same file a second time.
+            -->
             <button
-              class="btn btn-sm btn-{csvEnabled ? 'warning' : 'secondary'}"
-              title={$tr("params.csv.title")}
-              onclick={() => (currentDialog = "csv_props")}>
+              class="btn btn-sm btn-{$csvSource !== undefined ? 'primary' : 'secondary'}"
+              title={$tr("fields.title")}
+              onclick={openFieldsDialog}>
               <MdIcon icon="dataset" />
+              {$tr("editor.fields")}
             </button>
             <button
               class="btn btn-sm btn-secondary"
@@ -1407,10 +1515,8 @@
       onClose={() => (currentDialog = "none")}
       canvasCallback={getCanvasForPreview}
       {labelProps}
-      {csvEnabled}
       model={templateModel}
-      serialConfig={templateVariables.serial}
-      csvData={$csvData.data} />
+      serialConfig={templateVariables.serial} />
   {:else if currentDialog === "label_props"}
     <LabelPropsEditor
       onClose={() => (currentDialog = "none")}
@@ -1424,13 +1530,16 @@
       canvas={fabricCanvas!}
       onRequestLabelTemplate={exportCurrentLabel}
       {onLoadRequested}
-      {csvEnabled}
       {hasUnsavedChanges} />
-  {:else if currentDialog === "csv_props"}
-    <CsvControl
+  {:else if currentDialog === "csv_fields"}
+    <CsvFieldsControl
       onClose={() => (currentDialog = "none")}
-      bind:enabled={csvEnabled}
-      onPlaceholderPicked={onCsvPlaceholderPicked} />
+      existingColumns={fieldColumns}
+      onGenerate={onGenerateFields}
+      onAddField={onAddFieldColumn}
+      onAddDate={() => onObjectPicked("datetime")}
+      onAddSerial={() => onObjectPicked("serial")}
+      {onAddOperator} />
   {:else if currentDialog === "csv_batch"}
     <CsvBatchControl
       onClose={() => (currentDialog = "none")}
