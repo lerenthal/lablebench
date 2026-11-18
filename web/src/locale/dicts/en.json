@@ -503,7 +503,7 @@
   "printer.roll.lid_open": "The lid is open",
   "printer.roll.unreadable": "The tag could not be read. Reseat the roll.",
   "printer.roll.no_tag": "No tag. Set the size yourself under Label.",
-  "printer.roll.no_size": "The printer has not reported a size",
+  "printer.roll.no_size": "The printer has not reported a size. Set it under Label.",
   "printer.roll.too_wide": "Reading %w mm across a %h mm head — that is the backing paper, not the label. Ignored.",
   "printer.mismatch": "The design is %w × %h mm, which is not what is loaded.",
   "printer.mismatch.fit": "Use the loaded label",

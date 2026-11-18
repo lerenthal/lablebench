@@ -109,8 +109,16 @@ export type RollState =
    * wider than the one in the machine.
    */
   | { kind: "too_wide"; acrossMm: number; headMm: number }
-  /** A tag was read but it does not describe a label of a usable size. */
-  | { kind: "no_size" }
+  /**
+   * The printer answered, and the answer is not a label size.
+   *
+   * It carries the raw reading, because this is the state where the app is
+   * admitting it does not understand what the printer said - and the numbers
+   * the printer actually sent are the only thing that can settle why. A
+   * panel that says "no size" and nothing else makes every diagnosis a
+   * guess.
+   */
+  | { kind: "no_size"; reading?: string }
   /** A label of a known size is loaded. */
   | { kind: "loaded"; label: PhysicalLabel; gapMm?: number };
 
@@ -152,7 +160,25 @@ export const rollStateOf = (state: {
     return { kind: "no_tag" };
   }
 
-  return { kind: "no_size" };
+  return { kind: "no_size", reading: describePaper(paperInfo) };
+};
+
+/**
+ * The measurements the printer sent, in its own words.
+ *
+ * Shown only when the app could not make a label out of them. Which fields
+ * a model fills in varies - millimetres, dots, or a total that includes the
+ * gap - so when the reading is not understood, the reading itself is the
+ * useful thing to show.
+ */
+const describePaper = (paperInfo: PaperInfo | undefined): string | undefined => {
+  if (paperInfo === undefined) return undefined;
+
+  const parts = Object.entries(paperInfo)
+    .filter(([, value]) => typeof value === "number" && Number.isFinite(value))
+    .map(([name, value]) => `${name}=${String(value)}`);
+
+  return parts.length === 0 ? undefined : parts.join(" ");
 };
 
 /**

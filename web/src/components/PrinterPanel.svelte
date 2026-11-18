@@ -186,6 +186,13 @@
           {:else}
             <span class="printer-panel__hint">{$tr("printer.roll.no_size")}</span>
           {/if}
+          {#if roll.kind === "no_size" && roll.reading !== undefined}
+            <!--
+              What the printer actually sent. Only here, in the one state
+              where the app is admitting it did not understand the answer.
+            -->
+            <div class="printer-panel__reading">{roll.reading}</div>
+          {/if}
         </dd>
 
         {#if typeName !== undefined}
@@ -300,6 +307,15 @@
 
   .printer-panel__hint {
     color: var(--lb-text-faint);
+  }
+
+  .printer-panel__reading {
+    color: var(--lb-text-faint);
+    font-family: monospace;
+    font-size: var(--lb-text-xs);
+    margin-top: 0.15rem;
+    overflow-wrap: anywhere;
+    text-align: left;
   }
 
   hr {
