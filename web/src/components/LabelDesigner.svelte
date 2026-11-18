@@ -144,6 +144,11 @@
 
   undo.onLabelUpdate = async (data) => {
     await loadLabelData(data);
+    // The stack stores the template, so a restored object holds its token
+    // rather than its value: undoing used to leave `Lot: {lot}` sitting on
+    // the canvas where the lot number had been. The same was true of a date
+    // object, just less obvious. Resolving here puts the values back.
+    await refreshDynamicValues();
     hasUnsavedChanges = true;
   };
 
@@ -673,6 +678,56 @@
   };
 
   // --- fields from the spreadsheet ----------------------------------------
+  /**
+   * The "Text" object a blank label opens with.
+   *
+   * Held by reference, together with the words it was created saying, rather
+   * than looked up by its text later. A user who types the word "Text" into
+   * an object of their own has written content, and nothing here may mistake
+   * it for the app's own prompt.
+   */
+  let startingPlaceholder: { obj: fabric.FabricObject; text: string } | undefined = undefined;
+
+  /**
+   * Drop the starting placeholder, once there is something real on the label.
+   *
+   * A blank label opens with the word "Text" in the middle of it, as
+   * something to click. The moment the spreadsheet's fields land it stops
+   * being an invitation and becomes litter lying across them. It goes only
+   * if it is still the object this session put there and still says exactly
+   * what it was put there saying - edit it, and it is yours and it stays.
+   *
+   * Removed before the undo state is pushed, so one undo brings back the
+   * label as it was: placeholder and no fields.
+   */
+  const dropStartingPlaceholder = () => {
+    const placeholder = startingPlaceholder;
+
+    if (placeholder === undefined || fabricCanvas === undefined) {
+      return;
+    }
+
+    // One chance: whatever happens below, it is no longer the app's to remove.
+    startingPlaceholder = undefined;
+
+    if (!fabricCanvas.getObjects().includes(placeholder.obj)) {
+      return;
+    }
+
+    if (!(placeholder.obj instanceof fabric.Textbox) || placeholder.obj.text !== placeholder.text) {
+      return;
+    }
+
+    // `object:removed` pushes an undo state of its own. Left alone it would
+    // put a half-finished label on the stack - the fields down but not yet
+    // resolved, the placeholder already gone - and one undo would land
+    // there instead of on the label the user actually had. The whole
+    // generation is one step, so the only push is the one at the end of it.
+    undo.paused = true;
+    fabricCanvas.remove(placeholder.obj);
+    undo.paused = false;
+  };
+
   /** Which columns already have a field on the canvas. */
   let fieldColumns = $state<string[]>([]);
 
@@ -730,6 +785,7 @@
       );
     }
 
+    dropStartingPlaceholder();
     discardSelection();
     refreshFieldColumns();
     refreshDeclaredVariables();
@@ -966,7 +1022,12 @@
       }
     }
 
-    LabelDesignerObjectHelper.addText(fabricCanvas!, $tr("editor.default_text"));
+    const placeholderText = $tr("editor.default_text");
+
+    startingPlaceholder = {
+      obj: LabelDesignerObjectHelper.addText(fabricCanvas!, placeholderText),
+      text: placeholderText,
+    };
   };
 
   const renderOnFontsChanged = () => {
