@@ -12,6 +12,11 @@ services:
       dockerfile: app/Dockerfile
     image: labelbench/app:1.0.0
     restart: unless-stopped
+    # The app gives its own shutdown 8s (see app/src/shutdown.ts). Pinning the
+    # grace period here keeps Docker's patience the longer of the two, so a
+    # shutdown that drags ends in our own log line rather than in SIGKILL -
+    # and anyone shortening this knows to shorten the other.
+    stop_grace_period: 10s
     environment:
       LABELBENCH_HOST: 0.0.0.0
       LABELBENCH_PORT: 3000
@@ -43,6 +48,9 @@ services:
       LABELBENCH_IP: ${LABELBENCH_IP:-10.10.17.185}
       LABELBENCH_HTTPS_PORT: ${LABELBENCH_HTTPS_PORT:-8443}
       LABELBENCH_HTTP_PORT: ${LABELBENCH_HTTP_PORT:-8082}
+      # The CA this server signs with, so the setup page shows the real
+      # fingerprint rather than one written into it by hand.
+      LABELBENCH_CA_FINGERPRINT: ${LABELBENCH_CA_FINGERPRINT:-}
     ports:
       # These are the ports the workstations open. They must be a
       # browser-trusted HTTPS origin, or Web Bluetooth / Web Serial are

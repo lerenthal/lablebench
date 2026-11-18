@@ -19,6 +19,7 @@ import { authenticate, isAuthorized, rejectUnauthorized } from "./auth/index.js"
 import { registerHealthRoute, registerSerialRoutes, registerTemplateRoutes } from "./routes/api.js";
 import { AssetService } from "./services/assets.js";
 import { TemplateService } from "./services/templates.js";
+import { createShutdown } from "./shutdown.js";
 
 export async function buildServer() {
   const config = loadConfig();
@@ -106,6 +107,47 @@ async function main(): Promise<void> {
 
   await app.listen({ host, port });
   app.log.info(`LabelBench server listening on ${host}:${port}`);
+
+  installShutdown(app);
+}
+
+/**
+ * Stop cleanly when asked to stop.
+ *
+ * Node is PID 1 in the container, and without a handler of its own the
+ * process does not stop on SIGTERM at all: Docker waits out its grace
+ * period and sends SIGKILL. See `./shutdown.ts` for why that costs more than
+ * ten seconds of waiting.
+ */
+function installShutdown(app: Awaited<ReturnType<typeof buildServer>>): void {
+  const shutdown = createShutdown({
+    closeServer: () => app.close(),
+    closeDb: () => {
+      try {
+        // TRUNCATE rather than the default passive checkpoint: the aim is
+        // to leave the database file a complete copy of the data on its
+        // own, for anything that takes the volume as files - a tar, a VM
+        // snapshot, a restore drill. (`scripts/backup.sh` does not need
+        // this: it reads through SQLite's own backup API.)
+        app.db.pragma("wal_checkpoint(TRUNCATE)");
+      } catch (error) {
+        // An in-memory database has no WAL to check in, and a checkpoint
+        // that fails is no reason to leave the handle open.
+        app.log.warn({ err: error }, "the WAL could not be checked in");
+      }
+
+      app.db.close();
+    },
+    log: (message) => app.log.info(message),
+    warn: (message, error) => app.log.error({ err: error }, message),
+    exit: (code) => process.exit(code),
+  });
+
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.on(signal, () => {
+      void shutdown(signal);
+    });
+  }
 }
 
 const isMain = process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "");

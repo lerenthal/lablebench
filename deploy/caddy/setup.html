@@ -123,7 +123,15 @@
   <h2>1 — Fetch the certificate</h2>
   <div class="card">
     <p>The root certificate of the lab's internal CA. Its fingerprint is:</p>
-    <p class="fingerprint mono">F4:E5:16:F1:25:B8:19:14:0B:96:9F:AC:A0:E8:D3:BD:1C:95:7E:DF:85:58:DA:60:64:4A:8A:78:41:13:9E:55</p>
+    <p class="fingerprint mono">{{ placeholder "env.LABELBENCH_CA_FINGERPRINT" }}</p>
+    <!--
+      The fingerprint is the server's own, filled in when the certificate is
+      made. It used to be written into this page by hand, which meant a
+      server with a different CA showed a fingerprint that was not its own —
+      and told the reader to check against it. The page is the one place a
+      reader looks to be sure of what they are about to trust, so it has to
+      carry the truth.
+    -->
     <p><a href="/rootCA.pem" download>Download rootCA.pem</a> — or in a terminal:</p>
     <pre><code>curl -O http://{{ placeholder "env.LABELBENCH_HOST" }}:{{ placeholder "env.LABELBENCH_HTTP_PORT" }}/rootCA.pem
 openssl x509 -in rootCA.pem -noout -fingerprint -sha256</code></pre>
