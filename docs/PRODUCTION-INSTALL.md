@@ -302,7 +302,7 @@ openssl x509 -in /opt/labelbench/pki/rootCA.pem -noout -fingerprint -sha256
 It prints one line:
 
 ```
-sha256 Fingerprint=F4:E5:16:F1:25:B8:19:14:0B:96:9F:AC:A0:E8:D3:BD:1C:95:7E:DF:85:58:DA:60:64:4A:8A:78:41:13:9E:55
+sha256 Fingerprint=<the SHA-256 of YOUR CA — printed by prepare-host.sh>
 ```
 
 The value after the `=` is what the operator compares on every workstation.
@@ -569,6 +569,22 @@ both URLs are valid.
 One time per workstation. The `-k` on the download is unavoidable: the
 workstation does not trust the CA yet, that is the whole point of the step.
 The fingerprint check is what makes it safe.
+
+**The setup page shows this server's own CA.** It reads the fingerprint from
+`LABELBENCH_CA_FINGERPRINT`, which `scripts/setup-certs.sh` writes into `.env`
+when the certificate is made, and compose hands to Caddy. If you issue a
+certificate by another route, set that variable yourself:
+
+```
+LABELBENCH_CA_FINGERPRINT=$(openssl x509 -in /opt/labelbench/pki/rootCA.pem \
+  -noout -fingerprint -sha256 | cut -d= -f2)
+```
+
+The page asks the reader to check the certificate against the fingerprint it
+prints, so the two have to be the same CA. A page showing a different CA's
+fingerprint sends every reader into a mismatch they cannot resolve — and the
+page is exactly where someone looks to be sure of what they are about to
+trust.
 
 **Linux — the system trust store (for `curl`, `openssl`, `git`, Node):**
 
