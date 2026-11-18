@@ -285,17 +285,37 @@ export const physicalLabelOf = (
  */
 export const loadedLabelOf = (
   paperInfo: PaperInfo | undefined,
+  dpmm?: number,
 ): PhysicalLabel | undefined => {
-  if (paperInfo?.paperWidth === undefined) return undefined;
+  if (paperInfo === undefined) return undefined;
 
-  const acrossMm = paperInfo.paperWidth;
-  const alongMm = paperInfo.paperHeight;
+  // The printer may report the measurement in millimetres, in dots, or in
+  // both - which fields arrive depends on the model and the protocol version
+  // it speaks. They are the same measurement, so either will do, and dots
+  // are the exact one: the millimetre figure is derived from them.
+  const acrossMm = paperInfo.paperWidth ?? fromDots(paperInfo.paperWidthPixel, dpmm);
+  const alongMm = paperInfo.paperHeight ?? fromDots(paperInfo.paperHeightPixel, dpmm);
+
+  if (acrossMm === undefined || acrossMm <= 0) return undefined;
 
   if (alongMm === undefined || alongMm <= 0 || alongMm > 300) {
     return undefined;
   }
 
   return { acrossMm, alongMm };
+};
+
+/**
+ * A measurement the printer gave in dots, as millimetres.
+ *
+ * Only usable with the resolution those dots were counted at, so a reading
+ * with no printer to ask is no reading at all.
+ */
+const fromDots = (dots: number | undefined, dpmm: number | undefined): number | undefined => {
+  if (dots === undefined || dpmm === undefined || dpmm <= 0) return undefined;
+  if (!Number.isFinite(dots) || dots <= 0) return undefined;
+
+  return Math.round((dots / dpmm) * 100) / 100;
 };
 
 /**
@@ -320,7 +340,7 @@ export const loadedLabelFor = (
   printer: ConnectedPrinter | undefined,
   paperInfo: PaperInfo | undefined,
 ): PhysicalLabel | undefined => {
-  const loaded = loadedLabelOf(paperInfo);
+  const loaded = loadedLabelOf(paperInfo, printer?.dpmm);
 
   if (loaded === undefined) return undefined;
   if (printer !== undefined && loaded.acrossMm > printer.headMm) return undefined;

@@ -186,7 +186,56 @@ check(
     tag: undefined,
     heartbeat: undefined,
   }),
-  { kind: "no_size" },
+  { kind: "no_size", reading: undefined },
+);
+// When the app cannot make a label out of the answer, the answer itself is
+// the only thing that can settle why - so it is carried, not swallowed.
+check(
+  "an answer the app cannot use is reported verbatim",
+  roll.rollStateOf({
+    connected: true,
+    printer: b1,
+    paperInfo: { valid: true, totalHeight: 62, gapHeight: 2 },
+    tag: undefined,
+    heartbeat: { lidClosed: true },
+  }),
+  { kind: "no_size", reading: "totalHeight=62 gapHeight=2" },
+);
+
+console.log("");
+console.log("a size the printer reports only in dots");
+// Which fields arrive depends on the model and protocol version. Dots and
+// millimetres are the same measurement, so either will do.
+check(
+  "millimetres are used when they are there",
+  profile.loadedLabelOf({ valid: true, paperWidth: 40, paperHeight: 60 }, 8),
+  { acrossMm: 40, alongMm: 60 },
+);
+check(
+  "dots are converted when the millimetres are not",
+  profile.loadedLabelOf({ valid: true, paperWidthPixel: 320, paperHeightPixel: 480 }, 8),
+  { acrossMm: 40, alongMm: 60 },
+);
+check(
+  "a mix of the two still resolves",
+  profile.loadedLabelOf({ valid: true, paperWidth: 40, paperHeightPixel: 480 }, 8),
+  { acrossMm: 40, alongMm: 60 },
+);
+// Dots mean nothing without the resolution they were counted at.
+check(
+  "dots with no printer to ask are not a reading",
+  profile.loadedLabelOf({ valid: true, paperWidthPixel: 320, paperHeightPixel: 480 }, undefined),
+  undefined,
+);
+check(
+  "a 40 x 60 roll on a B1 is accepted, not refused as backing paper",
+  profile.loadedLabelFor(b1, { valid: true, paperWidth: 40, paperHeight: 60 }),
+  { acrossMm: 40, alongMm: 60 },
+);
+check(
+  "and the same roll reported in dots",
+  profile.loadedLabelFor(b1, { valid: true, paperWidthPixel: 320, paperHeightPixel: 480 }),
+  { acrossMm: 40, alongMm: 60 },
 );
 
 console.log("");
