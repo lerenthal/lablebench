@@ -1072,7 +1072,38 @@ way.
     so every rebuild overwrites it and a rollback requires a rebuild from the
     previous commit.
 
-12. **The bare systemd deployment** (`deploy/systemd/labelbench.service`) is
+12. **A B1 does not report the loaded label size, and the printer panel says
+    so.** Observed on 2026-11-18 with a B1 over USB and 40 × 60 mm gap
+    stock: the printer connects, the model and serial are read correctly,
+    and the panel reports *"The printer has not reported a size"* with no
+    measurements beneath it. The canvas is not resized. **Set the size with
+    the Label button instead — that works, and it is what that dialog is
+    for.** Everything else on the roll is unaffected.
+
+    What is known. The library parses the paper-info response only when it
+    is exactly 18 bytes long (`PacketParser.parsePaperInfoResponse`), and
+    its own comment says the response "can be 4 bytes, but it return some
+    unknown sizes". A response of any other length yields `{ valid: false }`
+    with no fields at all, which is indistinguishable from the printer
+    saying nothing — and is consistent with the empty reading seen here. The
+    app accepts the size in millimetres or in dots, so a unit mismatch is
+    ruled out.
+
+    A second, separate trap is waiting behind this one. When the response
+    *is* parsed, the library sets `paperHeight = totalHeight` and subtracts
+    the gap only for model id 785, the B21 Pro, with the comment
+    `todo: check other models?`. If a B1 ever starts answering, its length
+    may therefore arrive as the roll's pitch — the label plus the gap — and
+    a 60 mm label would size the canvas to 62 mm. Do not subtract the gap
+    on a guess: a wrong guess here makes every label short by the gap.
+
+    To resolve it, capture the actual response. With the printer connected,
+    the browser console logs every packet (`>> ` sent, `<< ` received); the
+    paper-info exchange is the one to keep. Its length and bytes decide both
+    questions at once. Until then this is a gap in the reading, not in the
+    app's handling of it.
+
+13. **The bare systemd deployment** (`deploy/systemd/labelbench.service`) is
     documented in the repository README and is not covered here. It needs
     `node_modules` present at runtime, not just `dist/`, because
     `better-sqlite3` is a native module tied to one Node ABI. It also needs
