@@ -89,6 +89,21 @@ echo
 
 CA_FINGERPRINT="$(openssl x509 -in "$CAROOT/rootCA.pem" -noout -fingerprint -sha256 | cut -d= -f2)"
 
+# The setup page tells a reader to check the certificate's fingerprint
+# against the one it shows. That fingerprint has to be this server's own CA,
+# so it is written into .env where compose hands it to Caddy. A server with
+# a different CA would otherwise show a fingerprint that was not its own —
+# on the one page a reader looks to be sure of what they are about to trust.
+ENV_FILE="$REPO_ROOT/.env"
+if [[ -f "$ENV_FILE" ]]; then
+  if grep -q '^LABELBENCH_CA_FINGERPRINT=' "$ENV_FILE"; then
+    sed -i "s|^LABELBENCH_CA_FINGERPRINT=.*|LABELBENCH_CA_FINGERPRINT=$CA_FINGERPRINT|" "$ENV_FILE"
+  else
+    printf '\n# The fingerprint of the CA this server signs with, shown on the setup page.\nLABELBENCH_CA_FINGERPRINT=%s\n' "$CA_FINGERPRINT" >> "$ENV_FILE"
+  fi
+  echo "==> Setup page shows   : $CA_FINGERPRINT"
+fi
+
 echo "Next steps:"
 echo "  1. Trust the root CA on THIS machine (so the server and your browser agree):"
 echo "       sudo cp $CAROOT/rootCA.pem /usr/local/share/ca-certificates/labelbench-rootCA.crt"
