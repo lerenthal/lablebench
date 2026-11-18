@@ -63,7 +63,16 @@ console.log("    integrity:", integrity);
 console.log("    templates:", templates);
 if (integrity !== "ok") { process.exit(1); }
 '
-docker compose exec -T app rm -f /tmp/labelbench-verify.db
+# Removed as root, not as the app.
+#
+# `docker compose cp` sets the copy's owner to whoever ran it - uid 1002 on
+# the reference host - while the container runs as node, uid 1000, and
+# /tmp is sticky. So the app cannot delete the file it was just handed, and
+# with `set -e` the script died here: after writing a perfectly good backup,
+# but before saying so. A nightly cron would have reported a failure every
+# night for a backup that worked, which is how people learn to ignore
+# backup alerts.
+docker compose exec -T -u 0 app rm -f /tmp/labelbench-verify.db
 
 ls -l "$DB_FILE" "$ASSET_FILE"
 echo "==> done: $DB_FILE"
