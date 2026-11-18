@@ -2,7 +2,7 @@
   import Dropdown from "bootstrap/js/dist/dropdown";
   import * as fabric from "fabric";
   import { DEFAULT_DPMM } from "$/services/template_store";
-  import { onDestroy, onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import { ArUcoMarker } from "$/fabric-object/aruco";
   import { Barcode } from "$/fabric-object/barcode";
   import { QRCode } from "$/fabric-object/qrcode";
@@ -57,7 +57,12 @@
   import { ensureObjectId, syncLinkedObjects } from "$/utils/linked_objects";
   import { TextboxExt } from "$/fabric-object/textbox-ext";
   import { csvSource, previewValues } from "$/stores/csv_source";
-  import { columnOfFieldText, fieldTextFor, layOutFields } from "$/utils/csv_fields";
+  import {
+    columnOfFieldText,
+    fieldTextFor,
+    layOutFields,
+    shouldGenerateFields,
+  } from "$/utils/csv_fields";
   import { operatorToken } from "$/utils/operator";
   import { clipboardKind, copyObject, copyObjectText, pasteObject, pasteText } from "$/utils/clipboard";
   import { api } from "$/services/api";
@@ -702,13 +707,13 @@
    * inside the printable area, which on a round label is the square inside
    * the circle rather than the canvas.
    */
-  const onGenerateFields = (columns: string[], showHeadings: boolean) => {
+  const generateFields = (columns: string[], showHeadings: boolean): number => {
     refreshFieldColumns();
 
     const missing = columns.filter((column) => !fieldColumns.includes(column));
 
     if (missing.length === 0) {
-      return;
+      return 0;
     }
 
     const area = printableArea(
@@ -732,6 +737,13 @@
     hasUnsavedChanges = true;
     undo.push(fabricCanvas!, labelProps);
     editRevision++;
+
+    return missing.length;
+  };
+
+  /** The Fields dialog's button, for a user who wants to ask for it again. */
+  const onGenerateFields = (columns: string[], showHeadings: boolean) => {
+    generateFields(columns, showHeadings);
   };
 
   /** One field, centred like any other newly added object. */
@@ -764,6 +776,70 @@
     refreshFieldColumns();
     currentDialog = "csv_fields";
   };
+
+  /**
+   * The spreadsheet that has just been loaded is the label's fields.
+   *
+   * Loading a CSV says what the label has to put on every bag; it should not
+   * then wait behind a button for the user to say it again. So the fields
+   * arrive with the data: one per column, stacked inside the printable area,
+   * each showing a real value from the previewed row and each immediately
+   * draggable to where it belongs.
+   *
+   * It is wired to the store rather than to either dialog, so a CSV loaded
+   * from the Fields dialog and one loaded from the batch dialog behave the
+   * same way - which is what was asked for, and is also the only way the two
+   * cannot drift apart.
+   *
+   * It generates only onto a label that shows *nothing* from this spreadsheet
+   * yet. That guard is deliberate: loading a CSV in the batch dialog is often
+   * how a finished template gets printed, and a spreadsheet with twelve
+   * columns would otherwise drop nine unwanted objects onto a design someone
+   * had already arranged. A label with no field in common with the CSV has
+   * clearly not been built for it - a blank label, or a switch to different
+   * data - and that is exactly when the fields should appear. To add the rest
+   * of a wider spreadsheet onto an existing design, the Fields dialog's
+   * button does it on request, which is the right way round for a change that
+   * moves someone's work.
+   */
+  let generatedFor: unknown = undefined;
+
+  $effect(() => {
+    const source = $csvSource;
+
+    if (source === generatedFor) {
+      return;
+    }
+
+    // The canvas is built in onMount. Returning without marking the source as
+    // seen means this runs again as soon as it exists, rather than silently
+    // skipping the one load that mattered.
+    if (fabricCanvas === undefined) {
+      return;
+    }
+
+    generatedFor = source;
+
+    if (source === undefined || source.columns.length === 0) {
+      return;
+    }
+
+    // untrack so the writes below - the field list, the revision counter -
+    // cannot feed back into this effect and run it a second time.
+    untrack(() => {
+      refreshFieldColumns();
+
+      if (!shouldGenerateFields(source.columns, fieldColumns)) {
+        return;
+      }
+
+      const added = generateFields(source.columns, true);
+
+      if (added > 0) {
+        Toasts.message($tr("fields.generated").replace("%n", String(added)));
+      }
+    });
+  });
 
   /**
    * Redraw the fields when the previewed row, or the operator's name,
@@ -1546,6 +1622,7 @@
       template={exportCurrentLabel()}
       fabricJson={getCanvasForPreview()}
       {labelProps}
+      declaredVariables={templateVariables.variables}
       onBindingChanged={onTemplateVariablesChanged} />
   {:else if currentDialog === "quick_print"}
     <QuickPrintGallery

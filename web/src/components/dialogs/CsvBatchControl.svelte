@@ -28,6 +28,7 @@
   import { Toasts } from "$/utils/toasts";
   import { untrack } from "svelte";
   import { csvSource, loadCsvSource } from "$/stores/csv_source";
+  import { get } from "svelte/store";
   import { applyOperator } from "$/utils/operator";
   import { operatorName } from "$/stores/app";
   import {
@@ -62,12 +63,27 @@
     /** The canvas document with assets already resolved to data URLs. */
     fabricJson: FabricJson;
     labelProps: LabelProps;
+    /**
+     * The variables the designer has declared, live.
+     *
+     * Unlike `template`, this is read as it changes rather than snapshotted:
+     * loading a spreadsheet lays fields onto the canvas, and when that
+     * happens while this dialog is open the new variables have to reach it.
+     */
+    declaredVariables?: TemplateVariable[];
     /** Called when the user changes the binding, so it can be persisted. */
     onBindingChanged?: (variables: TemplateVariables) => void;
     onClose?: () => void;
   }
 
-  let { template, fabricJson, labelProps, onBindingChanged, onClose }: Props = $props();
+  let {
+    template,
+    fabricJson,
+    labelProps,
+    declaredVariables,
+    onBindingChanged,
+    onClose,
+  }: Props = $props();
 
   /**
    * The dialog works on a snapshot of the template taken when it opens.
@@ -212,6 +228,42 @@
         variables = found.map((name) => ({ name, type: "text", required: false }));
       }
     }
+  });
+
+  /**
+   * Variables the designer declares while this dialog is open.
+   *
+   * The rest of the dialog works from the snapshot it opened with, which is
+   * right for a form the user is filling in and wrong for this one thing:
+   * loading a spreadsheet puts its fields on the canvas, so the variables
+   * can appear *after* the dialog did. A dialog that could not see them
+   * would show "this template declares no variables" about a label that had
+   * just grown four of them, and refuse to print.
+   *
+   * Only ever adds. A variable the user has already configured here, and a
+   * column they have bound by hand, are left exactly as they are.
+   */
+  $effect(() => {
+    const declared = declaredVariables ?? [];
+
+    if (declared.length === 0) {
+      return;
+    }
+
+    untrack(() => {
+      const known = variables.map((v) => v.name);
+      const missing = declared.filter((variable) => !known.includes(variable.name));
+
+      if (missing.length === 0) {
+        return;
+      }
+
+      variables = [...variables, ...missing];
+      // The new variables are named after the spreadsheet's own columns, so
+      // the match is the identity. Binding them here is what stops the user
+      // having to press "auto-match" for fields the app itself just made.
+      binding = autoBind(get(csvSource)?.columns ?? [], variables, binding);
+    });
   });
 
   const effectiveVariables = $derived<TemplateVariables>({

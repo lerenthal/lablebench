@@ -498,6 +498,7 @@
   "fields.generate": "The fields",
   "fields.with_headings": "Show the column heading in each field",
   "fields.generate_all": "Create a field for every column",
+  "fields.generated": "%n fields added from the spreadsheet. Drag each one where it belongs.",
   "fields.generate_hint": "Fields are stacked down the label to start with. Drag and style each one from there. A column that already has a field is left where you put it.",
   "fields.column": "Field",
   "fields.heading": "Heading",

@@ -274,6 +274,44 @@ check(
   { strain: "strain", lot: "lot", date: "date", qr: "qr" },
 );
 
+// --- when a loaded spreadsheet puts its fields on the label by itself -----
+//
+// The complaint this answers was that loading a CSV did nothing visible. The
+// rule has to fire on the empty label, and must not fire onto a design that
+// already shows that spreadsheet's columns - that would move someone's work.
+console.log("loading a spreadsheet lays down its fields");
+
+check(
+  "a blank label gets every column",
+  fields.shouldGenerateFields(parsed.columns, []),
+  true,
+);
+check(
+  "a label already designed for this spreadsheet is left alone",
+  fields.shouldGenerateFields(parsed.columns, ["lot"]),
+  false,
+);
+check(
+  "one field in common is enough to leave it alone",
+  fields.shouldGenerateFields(parsed.columns, ["qr", "operator"]),
+  false,
+);
+check(
+  "a label built for other data gets the new columns",
+  fields.shouldGenerateFields(parsed.columns, ["operator", "serial"]),
+  true,
+);
+check(
+  "a spreadsheet with no columns generates nothing",
+  fields.shouldGenerateFields([], []),
+  false,
+);
+check(
+  "re-loading the same spreadsheet adds nothing a second time",
+  fields.shouldGenerateFields(parsed.columns, parsed.columns),
+  false,
+);
+
 console.log("");
 
 if (failures > 0) {

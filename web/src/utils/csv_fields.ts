@@ -242,3 +242,24 @@ export const withHeading = (text: string, heading: string): string => {
 
   return trimmed === "" ? `{${column}}` : `${trimmed}${HEADER_SEPARATOR}{${column}}`;
 };
+
+/**
+ * Whether loading a spreadsheet should lay its fields onto the label.
+ *
+ * Yes when the label shows nothing from it yet. A label with a field in
+ * common with the CSV has already been designed for that data - someone
+ * positioned those fields - and a spreadsheet with twelve columns must not
+ * drop nine more objects on top of their work. A label with no field in
+ * common has not been built for this spreadsheet at all, whether because it
+ * is blank or because the user has switched to different data, and that is
+ * precisely when the fields should appear by themselves.
+ *
+ * The rule lives here, away from the canvas, because it is the one decision
+ * in this feature that is easy to get subtly wrong and worth pinning down in
+ * a test.
+ *
+ * @param columns  the loaded CSV's columns
+ * @param existing the columns that already have a field on the label
+ */
+export const shouldGenerateFields = (columns: string[], existing: string[]): boolean =>
+  columns.length > 0 && !columns.some((column) => existing.includes(column));
