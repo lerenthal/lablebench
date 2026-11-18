@@ -10,9 +10,11 @@
     selectedObject: fabric.FabricObject;
     editRevision: number;
     valueUpdated: () => void;
+    /** Printer dots per millimetre, so the position boxes can be millimetres. */
+    dpmm?: number;
   }
 
-  let { selectedObject, editRevision, valueUpdated }: Props = $props();
+  let { selectedObject, editRevision, valueUpdated, dpmm }: Props = $props();
 
   const putToCenterV = () => {
     selectedObject.canvas!.centerObjectV(selectedObject);
@@ -135,7 +137,7 @@
   </button>
 </div>
 
-<ObjectPositionControls {selectedObject} {editRevision} />
+<ObjectPositionControls {selectedObject} {editRevision} {dpmm} />
 
 <div class="dropdown">
   <button

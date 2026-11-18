@@ -16,7 +16,8 @@
     "format-all": "prettier --write \"src/**/*.{ts,svelte}\" \"!src/styles/mdi_icons.ts\"",
     "check-limits": "node scripts/check-print-limits.mjs",
     "check-fields": "node scripts/check-csv-fields.mjs",
-    "checks": "npm run check-limits && npm run check-fields"
+    "checks": "npm run check-limits && npm run check-fields && npm run check-roll",
+    "check-roll": "node scripts/check-printer-roll.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.4.1",

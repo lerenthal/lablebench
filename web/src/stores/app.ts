@@ -27,6 +27,7 @@ import { APP_CONFIG_DEFAULTS, OBJECT_DEFAULTS_TEXT } from "$/defaults";
 import z from "zod";
 import { FileUtils } from "$/utils/file_utils";
 import { connectedPrinterFor } from "$/utils/printer_profile";
+import { heartbeatSaysNewMedia } from "$/utils/printer_roll";
 
 export const fontCache = writable<string[]>([OBJECT_DEFAULTS_TEXT.fontFamily]);
 export const appConfig = writablePersisted<AppConfig>("config", AppConfigSchema, APP_CONFIG_DEFAULTS);
@@ -37,9 +38,16 @@ export const loadedFonts = writable<FontFace[]>([]);
 export const connectionState = writable<ConnectionState>("disconnected");
 export const connectedPrinterName = writable<string>("");
 export const printerClient = writable<NiimbotAbstractClient>();
-export const heartbeatData = writable<HeartbeatData>();
+export const heartbeatData = writable<HeartbeatData | undefined>(undefined);
 export const printerInfo = writable<PrinterInfo>();
 export const rfidInfo = writable<CombinedRfidInfo>({});
+/**
+ * When the roll was last read, as epoch milliseconds.
+ *
+ * A panel showing a reading without saying how old it is will quietly show
+ * yesterday's roll. `undefined` means nothing has been read this connection.
+ */
+export const rfidReadAt = writable<number | undefined>(undefined);
 export const printerMeta = writable<PrinterModelMeta | undefined>();
 
 /**
@@ -69,7 +77,6 @@ try {
 } catch {
   // A browser with storage blocked has nothing to clear.
 }
-export const dimensionsUpdateRequest = writable<{width: number, height: number} | null>(null);
 
 userFonts.subscribe(FileUtils.loadFonts);
 
@@ -125,15 +132,37 @@ export const initClient = (connectionType: ConnectionType) => {
         connectedPrinterName.set("");
         printerInfo.set(createPrinterInfo());
         printerMeta.set(undefined);
+
+        // The roll goes with the printer. Keeping the last reading would
+        // leave the panel describing media that is no longer in the room,
+        // and the designer sizing a canvas from it.
+        rfidInfo.set({});
+        rfidReadAt.set(undefined);
+        heartbeatData.set(undefined);
       });
 
       newClient.on("heartbeat", (e) => {
         heartbeatFails.set(0);
+
+        // The heartbeat is the only thing that tells the app a roll has been
+        // changed. It carries whether the lid is shut and whether the printer
+        // can feel paper, roughly every two seconds, so the app can re-read
+        // the tag at the moment the operator closes the lid instead of
+        // waiting to be told. The manual refresh stays for printers that
+        // report neither field.
+        const previous = get(heartbeatData);
         heartbeatData.set(e.data);
+
+        if (heartbeatSaysNewMedia(previous, e.data)) {
+          newClient.fetchRfidInfo().catch((err: unknown) => {
+            console.warn("Could not re-read the roll after it was changed", err);
+          });
+        }
       });
 
       newClient.on("rfidinfofetched", (e) => {
         rfidInfo.set(e.info);
+        rfidReadAt.set(Date.now());
       });
 
       newClient.on("heartbeatfailed", (e) => {
